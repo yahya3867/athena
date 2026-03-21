@@ -1,0 +1,16 @@
+[Unit]
+Description=Athena Whisplay Voice Assistant
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/athena-whisplay
+EnvironmentFile=/home/pi/athena-whisplay/.env
+ExecStart=/usr/bin/python3 main.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
