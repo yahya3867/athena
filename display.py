@@ -15,7 +15,18 @@ except ImportError:
 from PIL import Image, ImageDraw, ImageFont
 
 import config
-sys.path.append("/home/pi/Whisplay/Driver")
+
+_WHISPLAY_DRIVER_CANDIDATES = [
+    os.path.join(os.path.expanduser("~"), "Whisplay", "Driver"),
+    "/home/pi/Whisplay/Driver",
+    "/home/athena_pi/Whisplay/Driver",
+]
+
+for _driver_path in _WHISPLAY_DRIVER_CANDIDATES:
+    if os.path.exists(os.path.join(_driver_path, "WhisPlay.py")):
+        sys.path.append(_driver_path)
+        break
+
 from WhisPlay import WhisPlayBoard  # pyright: ignore[reportMissingImports]
 
 _FONT_PATH = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
@@ -29,12 +40,12 @@ _EMOJI_FONT_PATHS = [
     "/usr/share/fonts/truetype/ancient-scripts/Symbola_hint.ttf",
 ]
 
-STATUS_FONT_SIZE = 16
-STATUS_SUB_FONT_SIZE = 12
-RESPONSE_FONT_SIZE = 17
-TITLE_FONT_SIZE = 14
-BATTERY_FONT_SIZE = 10
-CLOCK_FONT_SIZE = 28
+STATUS_FONT_SIZE = 20
+STATUS_SUB_FONT_SIZE = 15
+RESPONSE_FONT_SIZE = 21
+TITLE_FONT_SIZE = 16
+BATTERY_FONT_SIZE = 12
+CLOCK_FONT_SIZE = 34
 ACCENT_BAR_HEIGHT = 3
 POWER_SUPPLY_SYS = "/sys/class/power_supply"
 PISUGAR_SOCKET = "/tmp/pisugar-server.sock"
