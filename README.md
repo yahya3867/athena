@@ -16,49 +16,23 @@ Core device flow:
 
 ```mermaid
 flowchart TD
-    subgraph RUNTIME["Pi Runtime Loop (main.py)"]
-        A["Boot via systemd or python3 main.py"] --> B["Initialize display, recorder, button callbacks,\noptional TTS player, conversation history"]
-        B --> C["Set idle owl screen\n(clock, battery, wifi)"]
-        C --> D{"Idle timeout reached?"}
-        D -->|"Yes"| E["Sleep display/backlight"]
-        E -->|"Any button press"| C
-        D -->|"No"| C
-    end
+    A["Press button on Athena"] --> B["Record audio on Pi\n(arecord + Whisplay UI)"]
+    B --> C["Transcribe speech\n/v1/audio/transcriptions\n gpt-4o-mini-transcribe"]
+    C --> D["Route request\n/v1/responses\n gpt-5-mini"]
+    D --> E{"Chat or visual?"}
 
-    C --> F["Button press -> LISTENING\nstart arecord + listening UI"]
-    F --> G["Button release -> worker thread"]
-    G --> H["Stop recording (/tmp/utterance.wav)"]
-    H --> I{"RMS above silence threshold?"}
-    I -->|"No"| J["Show 'No speech detected'\nDiscard wav -> back to idle"]
-    J --> C
-    I -->|"Yes"| K["STT: /v1/audio/transcriptions\ngpt-4o-mini-transcribe"]
+    E -->|"Chat"| F["Generate reply\n/v1/responses\n gpt-5.4 + short history"]
+    F --> G["Optional web search\nfor current info"]
+    G --> H["Speak reply\n/v1/audio/speech\n gpt-4o-mini-tts"]
+    H --> I["Show + read answer aloud\non Whisplay"]
 
-    K --> L{"Transcript empty?"}
-    L -->|"Yes"| C
-    L -->|"No"| M["Intent routing: /v1/responses\ngpt-5-mini + regex fallback"]
-    M --> N{"Route mode?"}
+    E -->|"Visual"| J["Rewrite spoken request\ninto an image prompt"]
+    J --> K["Generate image\n gpt-image-1.5"]
+    K --> L["Display full-screen picture,\nmap, or diagram"]
 
-    N -->|"Image"| O["Rewrite/normalize image prompt"]
-    O --> P["Generate image (gpt-image-1.5)\n1) Responses image_generation\n2) Fallback /v1/images/generations"]
-    P --> Q["Save PNG to output/images"]
-    Q --> R["Show full-screen image\n(display-only turn, no TTS)"]
-    R --> S["Append turn to history + trim"]
-    S --> C
-
-    N -->|"Chat"| T["Stream chat: /v1/responses (gpt-5.4)\nwith instructions + recent history"]
-    T --> U["Model may call web_search tool when needed"]
-    U --> V["SSE text deltas -> Whisplay response UI"]
-    V --> W{"TTS enabled?"}
-    W -->|"Yes"| X["Batch 2-3 sentences -> /v1/audio/speech\n(gpt-4o-mini-tts) and play audio"]
-    X --> Y1["Flush TTS + render full response text"]
-    W -->|"No"| Y2["Render full response text"]
-    Y1 --> Z["Append turn to history + trim"]
-    Y2 --> Z
-    Z --> AA{"Button dismiss or hold timeout?"}
-    AA --> C
-
-    AB["Press while TRANSCRIBING/THINKING/STREAMING\n(after cancel window opens)"] --> AC["Interrupt current turn:\ncancel recorder + cancel TTS + reset transient UI"]
-    AC --> F
+    I --> M["Return to idle owl screen"]
+    L --> M
+    M --> A
 ```
 
 ### Scenario Notes
