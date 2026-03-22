@@ -136,12 +136,3 @@ amixer -c 1 sget Speaker
 ```
 
 Or use `sync.sh` from your laptop to deploy and restart it on the Pi.
-
-## Notes
-
-- `main.py` is the real Pi entrypoint.
-- Conversation history is kept in memory and trimmed to the last few exchanges.
-- Web search is enabled, but the model is instructed to use it only for current or time-sensitive questions.
-- Image-vs-chat routing is handled by `gpt-5-mini` with regex fallback if the router call fails.
-- Image generation uses OpenAI image generation separately from GPT-5.4 chat.
-- The Whisplay driver is still required separately.
