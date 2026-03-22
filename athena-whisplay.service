@@ -7,9 +7,9 @@ Wants=network-online.target wm8960-soundcard.service
 Type=simple
 WorkingDirectory=/home/athena_pi/athena
 EnvironmentFile=/home/athena_pi/athena/.env
-ExecStartPre=/usr/bin/amixer -c 1 sset Speaker 100%
+ExecStartPre=/bin/sh -c '/usr/bin/amixer -c 1 sset Speaker 100% && /usr/bin/amixer -c 1 sset "Speaker AC" 100% && /usr/bin/amixer -c 1 sset "Speaker DC" 100% && /usr/bin/amixer -c 1 sset Playback 100%'
 ExecStart=/usr/bin/python3 /home/athena_pi/athena/main.py
-ExecStartPost=/bin/sh -c '/bin/sleep 3; /usr/bin/amixer -c 1 sset Speaker 100%'
+ExecStartPost=/bin/sh -c '/bin/sleep 3; /usr/bin/amixer -c 1 sset Speaker 100% && /usr/bin/amixer -c 1 sset "Speaker AC" 100% && /usr/bin/amixer -c 1 sset "Speaker DC" 100% && /usr/bin/amixer -c 1 sset Playback 100%'
 Restart=on-failure
 RestartSec=5
 

@@ -123,8 +123,8 @@ sudo journalctl -u athena-whisplay -f
 This service:
 
 - waits for `network-online.target` and WM8960 audio readiness
-- forces Whisplay speaker volume to `100%` before startup
-- reapplies Whisplay speaker volume to `100%` a few seconds after startup for reliability
+- forces the full Whisplay speaker chain (`Speaker`, `Speaker AC`, `Speaker DC`, and `Playback`) to `100%` before startup
+- reapplies that full speaker chain a few seconds after startup for reliability
 - runs Athena with system Python as root
 - restarts automatically if Athena exits unexpectedly
 
