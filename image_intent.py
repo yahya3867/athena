@@ -3,6 +3,7 @@ import re
 
 _ATHENA_PREFIX = re.compile(r"^\s*(?:hey\s+)?athena[\s,:\-]*", re.IGNORECASE)
 _TRAILING_PUNCT = re.compile(r"[\s\.\!\?]+$")
+_TRAILING_POLITE = re.compile(r"(?:,\s*)?please\s*$", re.IGNORECASE)
 _POLITE_PREFIX = re.compile(
     r"^\s*(?:(?:please|can you|could you|would you|will you)\s+)*(?:go ahead and\s+)?",
     re.IGNORECASE,
@@ -18,6 +19,10 @@ _IMAGE_PATTERNS = [
     ),
     re.compile(
         r"^can i have (?:a|an)?\s*(?:picture|image|photo|drawing|illustration|map|diagram|chart|visual) of (?P<prompt>.+)$",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"^give me (?:a|an)?\s*(?:picture|image|photo|drawing|illustration|map|diagram|chart|visual) of (?P<prompt>.+)$",
         re.IGNORECASE,
     ),
     re.compile(
@@ -97,9 +102,11 @@ def _extract_image_prompt_from_sentences(candidate: str) -> str | None:
 
 def _normalize_prompt(prompt: str) -> str | None:
     prompt = prompt.strip()
+    prompt = _TRAILING_POLITE.sub("", prompt).strip()
     prompt = _TRAILING_PUNCT.sub("", prompt).strip()
     if prompt.lower().startswith("that says"):
         prompt = f"poster {prompt}"
     if prompt:
+        prompt = _TRAILING_POLITE.sub("", prompt).strip()
         prompt = _TRAILING_PUNCT.sub("", prompt).strip()
     return prompt or None
