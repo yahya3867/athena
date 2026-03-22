@@ -8,7 +8,7 @@ _POLITE_PREFIX = re.compile(
     re.IGNORECASE,
 )
 _LEADIN_PREFIX = re.compile(
-    r"^\s*(?:i was wondering if you can\s+|i was wondering if you could\s+|i was wondering whether you can\s+|i was wondering whether you could\s+)",
+    r"^\s*(?:i was wondering if you can\s+|i was wondering if you could\s+|i was wondering whether you can\s+|i was wondering whether you could\s+|i want you to\s+|i need you to\s+|i would like you to\s+)",
     re.IGNORECASE,
 )
 _IMAGE_PATTERNS = [
@@ -21,11 +21,11 @@ _IMAGE_PATTERNS = [
         re.IGNORECASE,
     ),
     re.compile(
-        r"^(?:generate|create|make) (?:me\s+)?(?:a|an)?\s*(?:picture|image|photo|drawing|illustration) of (?P<prompt>.+)$",
+        r"^(?:generate|create|make) (?:me\s+)?(?:a|an)?\s*(?:picture|image|photo|drawing|illustration|poster|banner|flyer|sign|graphic|card) of (?P<prompt>.+)$",
         re.IGNORECASE,
     ),
     re.compile(
-        r"^(?:generate|create|make) (?:me\s+)?(?:a|an)?\s*(?:picture|image|photo|drawing|illustration) (?P<prompt>.+)$",
+        r"^(?:generate|create|make) (?:me\s+)?(?:a|an)?\s*(?:picture|image|photo|drawing|illustration|poster|banner|flyer|sign|graphic|card) (?P<prompt>.+)$",
         re.IGNORECASE,
     ),
     re.compile(
@@ -37,15 +37,15 @@ _IMAGE_PATTERNS = [
         re.IGNORECASE,
     ),
     re.compile(
-        r"^show me (?:a|an)?\s*(?:map|diagram|chart|visual|illustration) of (?P<prompt>.+)$",
+        r"^show me (?:a|an)?\s*(?:map|diagram|chart|visual|illustration|poster|banner|flyer|sign|graphic|card) of (?P<prompt>.+)$",
         re.IGNORECASE,
     ),
     re.compile(
-        r"^(?:generate|create|make) (?:me\s+)?(?:a|an)?\s*(?:map|diagram|chart|visual|illustration) of (?P<prompt>.+)$",
+        r"^(?:generate|create|make) (?:me\s+)?(?:a|an)?\s*(?:map|diagram|chart|visual|illustration|poster|banner|flyer|sign|graphic|card) of (?P<prompt>.+)$",
         re.IGNORECASE,
     ),
     re.compile(
-        r"^(?:generate|create|make) (?:me\s+)?(?:a|an)?\s*(?:map|diagram|chart|visual|illustration) (?P<prompt>.+)$",
+        r"^(?:generate|create|make) (?:me\s+)?(?:a|an)?\s*(?:map|diagram|chart|visual|illustration|poster|banner|flyer|sign|graphic|card) (?P<prompt>.+)$",
         re.IGNORECASE,
     ),
     re.compile(
@@ -74,12 +74,15 @@ def extract_image_prompt(text: str) -> str | None:
 
 
 def _extract_image_prompt_from_sentences(candidate: str) -> str | None:
-    parts = [part.strip() for part in re.split(r"(?<=[.!?])\s+", candidate) if part.strip()]
+    parts = [part.strip() for part in re.split(r"(?<=[.!?])\s+|,\s*", candidate) if part.strip()]
     if not parts:
         return None
     for idx, part in enumerate(parts):
+        cleaned = _ATHENA_PREFIX.sub("", part).strip()
+        cleaned = _LEADIN_PREFIX.sub("", cleaned).strip()
+        cleaned = _POLITE_PREFIX.sub("", cleaned).strip()
         for pattern in _IMAGE_PATTERNS:
-            match = pattern.match(part)
+            match = pattern.match(cleaned)
             if not match:
                 continue
             prompt = match.group("prompt").strip()
@@ -95,6 +98,8 @@ def _extract_image_prompt_from_sentences(candidate: str) -> str | None:
 def _normalize_prompt(prompt: str) -> str | None:
     prompt = prompt.strip()
     prompt = _TRAILING_PUNCT.sub("", prompt).strip()
+    if prompt.lower().startswith("that says"):
+        prompt = f"poster {prompt}"
     if prompt:
         prompt = _TRAILING_PUNCT.sub("", prompt).strip()
     return prompt or None

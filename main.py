@@ -190,6 +190,11 @@ class Assistant:
             return
 
         route = route_user_request(transcript)
+        route_prompt = route.get("image_prompt")
+        route_preview = None
+        if isinstance(route_prompt, str):
+            route_preview = route_prompt[:120]
+        log.info("intent route => mode=%s image_prompt=%r", route.get("mode"), route_preview)
         image_prompt = route.get("image_prompt") if route.get("mode") == "image" else None
         if image_prompt:
             self._state_entered_at = time.monotonic()

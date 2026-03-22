@@ -10,10 +10,11 @@ _ROUTER_PROMPT = (
     "You are an intent router for Athena, a voice assistant. "
     "Classify whether the user's request is asking Athena to create or display an image or visual aid, "
     "or whether it is a normal chat/explanation/search request. "
-    "Treat requests for maps, diagrams, charts, illustrations, visuals, and simple visual help as image requests. "
+    "Treat requests for maps, diagrams, charts, illustrations, visuals, posters, banners, signs, flyers, cards, and simple visual help as image requests. "
     "If it is an image request, rewrite it into a clean image-generation prompt that preserves style modifiers "
     "like 'make it cartoony', 'make it dramatic', or 'use warm colors'. "
-    "When the request is for a map or diagram, rewrite it into a simple, display-friendly visual prompt. "
+    "When the request is for a map, diagram, poster, or text-in-image design, rewrite it into a simple, display-friendly visual prompt. "
+    "If the user says the picture should contain words, preserve that text in the image prompt. "
     "Return JSON only with keys: mode and image_prompt. "
     "mode must be exactly 'image' or 'chat'. "
     "image_prompt must be a string for image mode, otherwise null. "
@@ -37,6 +38,8 @@ def route_user_request(user_text: str) -> dict[str, str | None]:
         return fallback
 
     if _is_valid_route(routed):
+        if routed.get("mode") == "chat" and fallback_prompt:
+            return fallback
         return routed
 
     if fallback_prompt:
