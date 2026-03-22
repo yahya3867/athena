@@ -807,7 +807,8 @@ class Display:
     def set_idle_screen(self):
         """Draw idle screen with owl mascot, large clock, date, battery, and wifi status."""
         self.reset_transient_state()
-        img = self._sprite_frames["idle"].copy()
+        img = Image.new("RGB", (self._width, self._height), (0, 0, 0))
+        img.paste(self._sprite_frames["idle"], (0, 18))
         draw = ImageDraw.Draw(img)
 
         draw.rectangle((0, 0, self._width, ACCENT_BAR_HEIGHT), fill=(40, 40, 40))
