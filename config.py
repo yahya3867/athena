@@ -18,6 +18,7 @@ OPENAI_IMAGE_SIZE = os.environ.get("OPENAI_IMAGE_SIZE", "1024x1024")
 OPENAI_IMAGE_QUALITY = os.environ.get("OPENAI_IMAGE_QUALITY", "medium")
 OPENAI_TTS_VOICE = os.environ.get("OPENAI_TTS_VOICE", "coral")
 OPENAI_TTS_SPEED = float(os.environ.get("OPENAI_TTS_SPEED", "1.12"))
+OPENAI_TTS_GAIN_DB = float(os.environ.get("OPENAI_TTS_GAIN_DB", "9"))
 OPENAI_TTS_INSTRUCTIONS = os.environ.get(
     "OPENAI_TTS_INSTRUCTIONS",
     "Speak with a distinctly feminine, elegant, confident voice with a light but noticeable Greek accent. "
@@ -88,6 +89,7 @@ def print_config() -> None:
     print(f"OPENAI_IMAGE_QUALITY   = {OPENAI_IMAGE_QUALITY}")
     print(f"OPENAI_TTS_VOICE       = {OPENAI_TTS_VOICE}")
     print(f"OPENAI_TTS_SPEED       = {OPENAI_TTS_SPEED}")
+    print(f"OPENAI_TTS_GAIN_DB     = {OPENAI_TTS_GAIN_DB}")
     print(f"OPENAI_WEB_SEARCH_TOOL = {OPENAI_WEB_SEARCH_TOOL}")
     print(f"WEB_SEARCH_ENABLED     = {OPENAI_ENABLE_WEB_SEARCH}")
     print(f"AUDIO_DEVICE           = {AUDIO_DEVICE}")

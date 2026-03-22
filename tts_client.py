@@ -3,6 +3,7 @@ import shutil
 import subprocess
 import threading
 import time
+import wave
 from pathlib import Path
 
 import requests
@@ -141,6 +142,7 @@ def _fetch_tts_wav(text: str, output_path: str | Path) -> Path:
         for chunk in resp.iter_content(chunk_size=4096):
             if chunk:
                 fh.write(chunk)
+    _apply_gain_to_wav(output, config.OPENAI_TTS_GAIN_DB)
     return output
 
 
@@ -151,6 +153,8 @@ def _play_audio(path: str | Path, owner: TTSPlayer | None = None) -> None:
         )
     cmd = [config.PLAYBACK_BIN, str(path)]
     if config.PLAYBACK_BIN.endswith("aplay") or config.PLAYBACK_BIN == "aplay":
+        if owner:
+            _normalize_playback_levels(owner)
         cmd = [config.PLAYBACK_BIN, "-q", "-D", config.AUDIO_OUTPUT_DEVICE, str(path)]
     proc = subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     if owner:
@@ -171,3 +175,47 @@ def _wav_duration_seconds(path: str | Path) -> float:
             return wf.getnframes() / rate
     except Exception:
         return 0.0
+
+
+def _normalize_playback_levels(owner: TTSPlayer | None = None) -> None:
+    controls = ("Speaker", "Speaker AC", "Speaker DC", "Playback")
+    for control in controls:
+        subprocess.run(
+            ["amixer", "-q", "-c", "1", "sset", control, "100%"],
+            capture_output=True,
+            check=False,
+        )
+
+
+def _apply_gain_to_wav(path: str | Path, gain_db: float) -> None:
+    if gain_db <= 0:
+        return
+    try:
+        wav_path = Path(path)
+        with wave.open(str(wav_path), "rb") as src:
+            params = src.getparams()
+            if params.sampwidth != 2:
+                return
+            frames = src.readframes(src.getnframes())
+        if not frames:
+            return
+
+        import array
+        import math
+
+        gain = math.pow(10.0, gain_db / 20.0)
+        samples = array.array("h")
+        samples.frombytes(frames)
+        for i, sample in enumerate(samples):
+            boosted = int(sample * gain)
+            if boosted > 32767:
+                boosted = 32767
+            elif boosted < -32768:
+                boosted = -32768
+            samples[i] = boosted
+
+        with wave.open(str(wav_path), "wb") as dst:
+            dst.setparams(params)
+            dst.writeframes(samples.tobytes())
+    except Exception:
+        return
