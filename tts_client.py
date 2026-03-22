@@ -52,7 +52,15 @@ class TTSPlayer:
     def flush(self) -> None:
         self._done.clear()
         self._queue.put(_SENTINEL)
-        self._done.wait(timeout=120)
+        deadline = time.monotonic() + 120
+        while not self._done.is_set():
+            if self._cancel.is_set():
+                self._done.set()
+                break
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            self._done.wait(timeout=min(0.1, remaining))
 
     def cancel(self) -> None:
         self._cancel.set()
@@ -61,6 +69,7 @@ class TTSPlayer:
                 self._play_proc.terminate()
             except OSError:
                 pass
+        self._play_proc = None
         while True:
             try:
                 self._queue.get_nowait()
@@ -68,6 +77,7 @@ class TTSPlayer:
                 break
         self._queue.put(_SENTINEL)
         self._current_text = ""
+        self._done.set()
 
     def speak_once(self, text: str, output_path: str | Path | None = None) -> Path:
         output = _fetch_tts_wav(text, output_path or config.DEFAULT_TTS_WAV_PATH)
@@ -95,6 +105,8 @@ class TTSPlayer:
             self._playback_start = time.monotonic()
             self._playback_duration = _wav_duration_seconds(output)
             _play_audio(output, owner=self)
+            if self._cancel.is_set():
+                self._cancel.clear()
             self._current_text = ""
 
 

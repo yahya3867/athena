@@ -24,13 +24,14 @@ STATE_COLORS = {
 class ButtonPTT:
     """Tracks push-to-talk button and application state."""
 
-    def __init__(self, board, on_press_cb=None, on_release_cb=None, on_cancel_cb=None, cancel_allowed_cb=None, on_any_press_cb=None, on_abort_listening_cb=None):
+    def __init__(self, board, on_press_cb=None, on_release_cb=None, on_cancel_cb=None, cancel_allowed_cb=None, on_any_press_cb=None, on_abort_listening_cb=None, on_interrupt_cb=None):
         self._board = board
         self._on_press = on_press_cb
         self._on_release = on_release_cb
         self._on_cancel = on_cancel_cb
         self._on_any_press = on_any_press_cb  # called on every press first (e.g. wake display)
         self._on_abort_listening = on_abort_listening_cb  # called when press while LISTENING (stuck / abort)
+        self._on_interrupt = on_interrupt_cb  # called when press should cancel current turn and immediately listen
         self._cancel_allowed = cancel_allowed_cb
         self._state = State.IDLE
         self._lock = threading.Lock()
@@ -73,9 +74,13 @@ class ButtonPTT:
         if self._state in (State.TRANSCRIBING, State.THINKING, State.STREAMING):
             if self._cancel_allowed and not self._cancel_allowed():
                 return
-            self._state = State.IDLE
-            self._update_led(State.IDLE)
-            if self._on_cancel:
+            self._state = State.LISTENING
+            self._update_led(State.LISTENING)
+            if self._on_interrupt:
+                self._on_interrupt()
+            elif self._on_cancel:
+                self._state = State.IDLE
+                self._update_led(State.IDLE)
                 self._on_cancel()
             return
         if self._state not in (State.IDLE, State.ERROR):

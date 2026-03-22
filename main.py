@@ -38,6 +38,7 @@ class Assistant:
             on_press_cb=self._on_button_press,
             on_release_cb=self._on_button_release,
             on_cancel_cb=self._on_button_cancel,
+            on_interrupt_cb=self._on_button_interrupt,
             cancel_allowed_cb=lambda: (time.monotonic() - self._state_entered_at) >= 2.0,
             on_any_press_cb=self._touch,
             on_abort_listening_cb=self._on_abort_listening,
@@ -46,7 +47,7 @@ class Assistant:
         self._shutdown = threading.Event()
         self._dismiss = threading.Event()
         self._worker_gen = 0
-        self._response_hold_timeout = 30
+        self._response_hold_timeout = 12
         self._sleep_timeout = 60
         self._last_activity = time.monotonic()
         self._last_idle_refresh = 0.0
@@ -65,29 +66,40 @@ class Assistant:
 
     def _on_button_cancel(self):
         """Cancel any active operation (transcribing, thinking, or streaming)."""
+        self._interrupt_current_turn()
+        self._go_idle()
+        log.info("button cancel -- back to Ready")
+
+    def _on_button_interrupt(self):
+        """Stop the current turn immediately and begin a fresh recording."""
+        self._interrupt_current_turn()
+        log.info("button interrupt -- restart listening")
+        self._begin_listening()
+
+    def _interrupt_current_turn(self):
         self._touch()
         self._worker_gen += 1
         self._dismiss.set()
-        self.display.stop_spinner()
-        self.display.stop_character()
+        self.recorder.cancel()
         if self._tts:
             self._tts.cancel()
-        self._go_idle()
-        log.info("button cancel -- back to Ready")
+        self.display.reset_transient_state()
 
     def _on_abort_listening(self):
         """Called when user presses again while in LISTENING (stuck or abort): stop recorder, go Ready."""
         self.recorder.cancel()
-        self.display.stop_character()
+        self.display.reset_transient_state()
         self._go_idle()
         log.info("abort listening -- back to Ready")
 
     def _on_button_press(self):
+        self._begin_listening()
+
+    def _begin_listening(self):
         self._touch()
         self._dismiss.set()
         log.info("button pressed -- start recording")
-        if self.display.is_showing_image():
-            self.display.clear_image()
+        self.display.reset_transient_state()
         if self._tts:
             self.display.start_character("listening", self._tts)
         else:
@@ -135,8 +147,9 @@ class Assistant:
         if rms < config.SILENCE_RMS_THRESHOLD:
             log.info("silence detected (RMS=%.0f), skipping", rms)
             if self._is_stale(my_gen):
+                self.recorder.discard()
                 return
-            self.display.stop_character()
+            self.display.reset_transient_state()
             self.display.set_status(
                 "No speech detected",
                 color=(160, 160, 160),
@@ -146,9 +159,11 @@ class Assistant:
             time.sleep(1.5)
             if not self._is_stale(my_gen):
                 self._go_idle()
+            self.recorder.discard()
             return
 
         if self._is_stale(my_gen):
+            self.recorder.discard()
             return
 
         # --- Transcribe ---
@@ -171,6 +186,7 @@ class Assistant:
             if not self._is_stale(my_gen):
                 log.info("empty transcript, returning to idle")
                 self._go_idle()
+            self.recorder.discard()
             return
 
         route = route_user_request(transcript)
@@ -178,8 +194,7 @@ class Assistant:
         if image_prompt:
             self._state_entered_at = time.monotonic()
             self.ptt.state = State.THINKING
-            self.display.stop_spinner()
-            self.display.stop_character()
+            self.display.reset_transient_state()
             self.display.set_status(
                 "Drawing...",
                 color=(210, 190, 255),
@@ -200,6 +215,7 @@ class Assistant:
             if len(self._conversation_history) > max_msgs:
                 self._conversation_history = self._conversation_history[-max_msgs:]
             log.info("image request complete -- showing %s", image_path)
+            self.recorder.discard()
             return
 
         # --- Stream response from Athena chat backend (with conversation context) ---
@@ -244,6 +260,7 @@ class Assistant:
 
         # Stale worker: exit without touching display, TTS, or history
         if self._is_stale(my_gen):
+            self.recorder.discard()
             return
 
         log.info("stream done in %.1fs, %d chars", time.monotonic() - stream_t0, len(full_response))
@@ -253,6 +270,9 @@ class Assistant:
             if tts_buffer.strip():
                 self._tts.submit(tts_buffer.strip())
             self._tts.flush()
+            if self._is_stale(my_gen):
+                self.recorder.discard()
+                return
             self.display.stop_character()
             self.display.set_response_text(full_response)
         else:
@@ -272,6 +292,7 @@ class Assistant:
 
         # Could have been cancelled during the hold
         if self._is_stale(my_gen):
+            self.recorder.discard()
             return
 
         if self._dismiss.is_set():
@@ -280,18 +301,19 @@ class Assistant:
             log.info("display timeout, returning to idle")
 
         self._go_idle()
+        self.recorder.discard()
 
     def _go_idle(self):
         self._last_activity = time.monotonic()
         self._last_idle_refresh = time.monotonic()
         self.ptt.state = State.IDLE
         self.display.set_backlight(config.LCD_BACKLIGHT)
-        self.display.stop_character()
+        self.display.reset_transient_state()
         self.display.set_idle_screen()
 
     def _show_error(self, msg: str):
         self.ptt.state = State.ERROR
-        self.display.stop_character()
+        self.display.reset_transient_state()
         self.display.set_status(
             msg[:50] + ("..." if len(msg) > 50 else ""),
             color=(255, 120, 120),
@@ -342,7 +364,7 @@ class Assistant:
         self.recorder.cancel()
         if self._tts:
             self._tts.cancel()
-        self.display.stop_character()
+        self.display.reset_transient_state()
         if self._worker_thread and self._worker_thread.is_alive():
             self._worker_thread.join(timeout=5)
         self.display.cleanup()

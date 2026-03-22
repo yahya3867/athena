@@ -8,10 +8,12 @@ from image_intent import extract_image_prompt
 
 _ROUTER_PROMPT = (
     "You are an intent router for Athena, a voice assistant. "
-    "Classify whether the user's request is asking Athena to create or display an image, "
+    "Classify whether the user's request is asking Athena to create or display an image or visual aid, "
     "or whether it is a normal chat/explanation/search request. "
+    "Treat requests for maps, diagrams, charts, illustrations, visuals, and simple visual help as image requests. "
     "If it is an image request, rewrite it into a clean image-generation prompt that preserves style modifiers "
     "like 'make it cartoony', 'make it dramatic', or 'use warm colors'. "
+    "When the request is for a map or diagram, rewrite it into a simple, display-friendly visual prompt. "
     "Return JSON only with keys: mode and image_prompt. "
     "mode must be exactly 'image' or 'chat'. "
     "image_prompt must be a string for image mode, otherwise null. "
@@ -98,4 +100,3 @@ def _is_valid_route(route: dict[str, str | None]) -> bool:
     if mode == "image" and isinstance(image_prompt, str) and image_prompt.strip():
         return True
     return False
-

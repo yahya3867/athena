@@ -62,8 +62,7 @@ class Recorder:
         if self.is_recording:
             return
 
-        if os.path.exists(WAV_PATH):
-            os.remove(WAV_PATH)
+        self.discard()
 
         cmd = [
             "arecord",
@@ -128,6 +127,7 @@ class Recorder:
         """Kill recording without caring about output."""
         proc = self._proc
         if proc is None:
+            self.discard()
             return
         try:
             proc.kill()
@@ -138,3 +138,12 @@ class Recorder:
         except Exception:
             pass
         self._proc = None
+        self.discard()
+
+    def discard(self) -> None:
+        """Remove any leftover recording artifact from a prior turn."""
+        try:
+            if os.path.exists(WAV_PATH):
+                os.remove(WAV_PATH)
+        except OSError:
+            pass

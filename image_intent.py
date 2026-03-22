@@ -17,6 +17,10 @@ _IMAGE_PATTERNS = [
         re.IGNORECASE,
     ),
     re.compile(
+        r"^can i have (?:a|an)?\s*(?:picture|image|photo|drawing|illustration|map|diagram|chart|visual) of (?P<prompt>.+)$",
+        re.IGNORECASE,
+    ),
+    re.compile(
         r"^(?:generate|create|make) (?:me\s+)?(?:a|an)?\s*(?:picture|image|photo|drawing|illustration) of (?P<prompt>.+)$",
         re.IGNORECASE,
     ),
@@ -30,6 +34,22 @@ _IMAGE_PATTERNS = [
     ),
     re.compile(
         r"^paint (?P<prompt>.+)$",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"^show me (?:a|an)?\s*(?:map|diagram|chart|visual|illustration) of (?P<prompt>.+)$",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"^(?:generate|create|make) (?:me\s+)?(?:a|an)?\s*(?:map|diagram|chart|visual|illustration) of (?P<prompt>.+)$",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"^(?:generate|create|make) (?:me\s+)?(?:a|an)?\s*(?:map|diagram|chart|visual|illustration) (?P<prompt>.+)$",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"^show me where (?P<prompt>.+)$",
         re.IGNORECASE,
     ),
 ]

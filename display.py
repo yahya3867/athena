@@ -726,20 +726,25 @@ class Display:
         return image.resize((self._width, self._height), Image.LANCZOS)
 
     def show_image(self, image_path: str) -> None:
-        self._stop_animations()
+        self.reset_transient_state()
         if not os.path.isfile(image_path):
             raise FileNotFoundError(f"Image not found: {image_path}")
         if self._image_path != image_path or self._image_cache is None:
             self._image_cache = self._prepare_fullscreen_image(image_path)
             self._image_path = image_path
         self._draw(self._image_cache)
-        self._response_buf = ""
-        self._cached_paragraphs = []
-        self._cached_wrapped = []
 
     def clear_image(self) -> None:
         self._image_path = None
         self._image_cache = None
+
+    def reset_transient_state(self) -> None:
+        """Clear text/image state and stop transient UI animations."""
+        self._stop_animations()
+        self.clear_image()
+        self._response_buf = ""
+        self._cached_paragraphs = []
+        self._cached_wrapped = []
 
     def set_status(
         self,
@@ -749,7 +754,7 @@ class Display:
         accent_color: tuple[int, int, int] | None = None,
     ):
         """Show a status screen: optional accent bar, main text, optional subtitle."""
-        self.clear_image()
+        self.reset_transient_state()
         img = Image.new("RGB", (self._width, self._height), (0, 0, 0))
         draw = ImageDraw.Draw(img)
 
@@ -787,13 +792,9 @@ class Display:
 
         self._draw_battery(draw)
         self._draw(img)
-        self._response_buf = ""
-        self._cached_paragraphs = []
-        self._cached_wrapped = []
-
     def set_idle_screen(self):
         """Draw idle screen with clock, date, battery, and wifi status."""
-        self.clear_image()
+        self.reset_transient_state()
         img = Image.new("RGB", (self._width, self._height), (0, 0, 0))
         draw = ImageDraw.Draw(img)
 
@@ -831,10 +832,6 @@ class Display:
         draw.text((sx, sy), sub, font=self._status_sub_font, fill=(70, 70, 70))
 
         self._draw(img)
-        self._response_buf = ""
-        self._cached_paragraphs = []
-        self._cached_wrapped = []
-
     # ── Sprite-based animated character ─────────────────────────────
 
     _ACCENT_COLORS = {
@@ -987,10 +984,8 @@ class Display:
 
     def set_response_text(self, text: str):
         """Draw full wrapped response text, scrolled to bottom."""
-        self.clear_image()
+        self.reset_transient_state()
         self._response_buf = text
-        self._cached_paragraphs = []
-        self._cached_wrapped = []
         self._render_response(force=True)
 
     def append_response(self, delta: str):
