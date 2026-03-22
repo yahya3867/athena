@@ -16,27 +16,49 @@ Core device flow:
 
 ```mermaid
 flowchart TD
-    A["Press button"] --> B["Record audio\narecord"]
-    B --> C["Speech to text\n/v1/audio/transcriptions\ngpt-4o-mini-transcribe"]
-    C --> D["Intent routing\n/v1/responses\ngpt-5-mini"]
+    subgraph RUNTIME["Pi Runtime Loop (main.py)"]
+        A["Boot via systemd or python3 main.py"] --> B["Initialize display, recorder, button callbacks,\noptional TTS player, conversation history"]
+        B --> C["Set idle owl screen\n(clock, battery, wifi)"]
+        C --> D{"Idle timeout reached?"}
+        D -->|"Yes"| E["Sleep display/backlight"]
+        E -->|"Any button press"| C
+        D -->|"No"| C
+    end
 
-    D -->|"chat"| E["Chat response\n/v1/responses\ngpt-5.4"]
-    E --> F{"Fresh info needed?"}
-    F -->|"No"| G["Stream short answer\nto Whisplay"]
-    F -->|"Yes"| H["OpenAI web search\ninside /v1/responses"]
-    H --> G
-    G --> I{"TTS enabled?"}
-    I -->|"Yes"| J["Text to speech\n/v1/audio/speech\ngpt-4o-mini-tts"]
-    J --> K["Play audio\nwm8960 speaker"]
-    I -->|"No"| L["Keep answer\non screen"]
-    K --> L
-    L --> M["Return to idle\nowl screen"]
+    C --> F["Button press -> LISTENING\nstart arecord + listening UI"]
+    F --> G["Button release -> worker thread"]
+    G --> H["Stop recording (/tmp/utterance.wav)"]
+    H --> I{"RMS above silence threshold?"}
+    I -->|"No"| J["Show 'No speech detected'\nDiscard wav -> back to idle"]
+    J --> C
+    I -->|"Yes"| K["STT: /v1/audio/transcriptions\ngpt-4o-mini-transcribe"]
 
-    D -->|"image"| N["Rewrite image prompt\nmap, diagram, picture"]
-    N --> O["Generate image\ngpt-image-1.5"]
-    O --> P["Show full-screen image\non Whisplay"]
-    P --> Q["Image turn is display-only\nno speech"]
-    Q --> M
+    K --> L{"Transcript empty?"}
+    L -->|"Yes"| C
+    L -->|"No"| M["Intent routing: /v1/responses\ngpt-5-mini + regex fallback"]
+    M --> N{"Route mode?"}
+
+    N -->|"Image"| O["Rewrite/normalize image prompt"]
+    O --> P["Generate image (gpt-image-1.5)\n1) Responses image_generation\n2) Fallback /v1/images/generations"]
+    P --> Q["Save PNG to output/images"]
+    Q --> R["Show full-screen image\n(display-only turn, no TTS)"]
+    R --> S["Append turn to history + trim"]
+    S --> C
+
+    N -->|"Chat"| T["Stream chat: /v1/responses (gpt-5.4)\nwith instructions + recent history"]
+    T --> U["Model may call web_search tool when needed"]
+    U --> V["SSE text deltas -> Whisplay response UI"]
+    V --> W{"TTS enabled?"}
+    W -->|"Yes"| X["Batch 2-3 sentences -> /v1/audio/speech\n(gpt-4o-mini-tts) and play audio"]
+    X --> Y1["Flush TTS + render full response text"]
+    W -->|"No"| Y2["Render full response text"]
+    Y1 --> Z["Append turn to history + trim"]
+    Y2 --> Z
+    Z --> AA{"Button dismiss or hold timeout?"}
+    AA --> C
+
+    AB["Press while TRANSCRIBING/THINKING/STREAMING\n(after cancel window opens)"] --> AC["Interrupt current turn:\ncancel recorder + cancel TTS + reset transient UI"]
+    AC --> F
 ```
 
 ### Scenario Notes
