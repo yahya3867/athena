@@ -51,6 +51,11 @@ IDLE_CLOCK_FONT_SIZE = 42
 ACCENT_BAR_HEIGHT = 3
 POWER_SUPPLY_SYS = "/sys/class/power_supply"
 PISUGAR_SOCKET = "/tmp/pisugar-server.sock"
+IDLE_BG_COLOR = (186, 224, 255)
+IDLE_PANEL_COLOR = (138, 183, 226)
+IDLE_PANEL_DARK = (102, 150, 198)
+IDLE_PRIMARY_TEXT = (24, 49, 84)
+IDLE_SECONDARY_TEXT = (59, 88, 126)
 
 
 def _load_emoji_font(size: int) -> ImageFont.FreeTypeFont | None:
@@ -840,15 +845,15 @@ class Display:
     def set_idle_screen(self):
         """Draw idle screen with owl mascot, large clock, date, battery, and wifi status."""
         self.reset_transient_state()
-        img = Image.new("RGB", (self._width, self._height), (0, 0, 0))
+        img = Image.new("RGB", (self._width, self._height), IDLE_BG_COLOR)
         img.paste(self._sprite_frames["idle"], (0, 64))
         draw = ImageDraw.Draw(img)
 
-        draw.rectangle((0, 0, self._width, ACCENT_BAR_HEIGHT), fill=(40, 40, 40))
-        draw.rectangle((0, 0, self._width, 60), fill=(0, 0, 0))
-        draw.rectangle((0, self._height - 36, self._width, self._height), fill=(0, 0, 0))
+        draw.rectangle((0, 0, self._width, ACCENT_BAR_HEIGHT), fill=IDLE_PANEL_DARK)
+        draw.rectangle((0, 0, self._width, 60), fill=IDLE_PANEL_COLOR)
+        draw.rectangle((0, self._height - 36, self._width, self._height), fill=IDLE_PANEL_COLOR)
 
-        self._draw_battery_text(draw, self._idle_battery_font, (175, 175, 175), 6)
+        self._draw_battery_text(draw, self._idle_battery_font, IDLE_PRIMARY_TEXT, 6)
 
         # Wifi indicator (top-left)
         if _wifi_connected():
@@ -863,21 +868,21 @@ class Display:
         tw = self._idle_clock_font.getlength(time_str)
         tx = int((self._width - tw) / 2)
         ty = 8
-        draw.text((tx, ty), time_str, font=self._idle_clock_font, fill=(235, 235, 235))
+        draw.text((tx, ty), time_str, font=self._idle_clock_font, fill=IDLE_PRIMARY_TEXT)
 
         # Date
         date_str = now.strftime("%a, %b %d")
         dw = self._status_sub_font.getlength(date_str)
         dx = int((self._width - dw) / 2)
         dy = ty + IDLE_CLOCK_FONT_SIZE + 1
-        draw.text((dx, dy), date_str, font=self._status_sub_font, fill=(135, 135, 135))
+        draw.text((dx, dy), date_str, font=self._status_sub_font, fill=IDLE_SECONDARY_TEXT)
 
         # Subtitle
         sub = "Press button to talk"
         sw = self._status_sub_font.getlength(sub)
         sx = int((self._width - sw) / 2)
         sy = self._height - STATUS_SUB_FONT_SIZE - 8
-        draw.text((sx, sy), sub, font=self._status_sub_font, fill=(115, 115, 115))
+        draw.text((sx, sy), sub, font=self._status_sub_font, fill=IDLE_SECONDARY_TEXT)
 
         self._draw(img)
     # ── Sprite-based animated character ─────────────────────────────
