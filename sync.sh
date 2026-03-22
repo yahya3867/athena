@@ -1,8 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 
-TARGET_HOST="${TARGET_HOST:-pi@pizero.local}"
-TARGET_DIR="${TARGET_DIR:-/home/pi/athena-whisplay}"
+TARGET_HOST="${TARGET_HOST:-athena_pi@athena.local}"
+TARGET_DIR="${TARGET_DIR:-/home/athena_pi/athena}"
 SERVICE_NAME="athena-whisplay"
 
 rsync -avz --delete \

@@ -102,23 +102,32 @@ OPENAI_IMAGE_QUALITY="medium"
 ### Run on the Pi
 
 ```bash
-source .venv/bin/activate
-python3 main.py
+sudo python3 /home/athena_pi/athena/main.py
 ```
 
 ### Run on boot with systemd
 
 This repo includes `athena-whisplay.service`.
 
-If the repo lives at `/home/pi/athena-whisplay`, install it with:
+If the repo lives at `/home/athena_pi/athena`, install it with:
 
 ```bash
 sudo cp athena-whisplay.service /etc/systemd/system/athena-whisplay.service
 sudo systemctl daemon-reload
 sudo systemctl enable athena-whisplay
-sudo systemctl restart athena-whisplay
+sudo systemctl start athena-whisplay
+sudo systemctl status athena-whisplay
 sudo journalctl -u athena-whisplay -f
 ```
+
+This service:
+
+- waits for `network-online.target`
+- forces Whisplay speaker volume to `100%` before startup
+- runs Athena with system Python as root
+- restarts automatically if Athena exits unexpectedly
+
+After it is enabled once, Athena should start automatically on every boot without SSH.
 
 Or use `sync.sh` from your laptop to deploy and restart it on the Pi.
 

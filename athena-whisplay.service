@@ -5,10 +5,10 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=pi
-WorkingDirectory=/home/pi/athena-whisplay
-EnvironmentFile=/home/pi/athena-whisplay/.env
-ExecStart=/usr/bin/python3 main.py
+WorkingDirectory=/home/athena_pi/athena
+EnvironmentFile=/home/athena_pi/athena/.env
+ExecStartPre=/usr/bin/amixer -c 1 sset Speaker 100%
+ExecStart=/usr/bin/python3 /home/athena_pi/athena/main.py
 Restart=on-failure
 RestartSec=5
 
