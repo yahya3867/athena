@@ -63,7 +63,7 @@ Image mode:
 
 - Raspberry Pi OS
 - Python 3.11+
-- Whisplay driver installed at `/home/pi/Whisplay/Driver/`
+- Whisplay driver installed in a common path such as `/home/athena_pi/Whisplay/Driver/` or `/home/pi/Whisplay/Driver/`
 - `alsa-utils` for `arecord` / `aplay`
 
 ### Install dependencies
@@ -71,7 +71,7 @@ Image mode:
 On the Pi:
 
 ```bash
-sudo apt install python3-numpy python3-pil alsa-utils ffmpeg
+sudo apt install python3-numpy python3-pil python3-requests python3-dotenv alsa-utils ffmpeg
 ```
 
 Then in the repo:
@@ -80,6 +80,8 @@ Then in the repo:
 cp .env.example .env
 ./bootstrap.sh
 ```
+
+`bootstrap.sh` creates a local virtual environment, but the real Pi service runs with system Python (`/usr/bin/python3`), so the system packages above should still be installed.
 
 Then edit `.env`:
 
