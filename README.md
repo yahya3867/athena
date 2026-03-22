@@ -137,36 +137,11 @@ amixer -c 1 sget Speaker
 
 Or use `sync.sh` from your laptop to deploy and restart it on the Pi.
 
-## Laptop Test Mode
-
-The CLI prototype is still available for off-device testing with `demo_runner.py`.
-
-Useful laptop commands:
-
-```bash
-python3 demo_runner.py check
-python3 demo_runner.py record
-python3 demo_runner.py stt --wav output/utterance.wav
-python3 demo_runner.py chat --text "What is your name?"
-python3 demo_runner.py image --prompt "a calm owl in ancient Athens"
-python3 demo_runner.py tts --text "Hello from the prototype."
-python3 demo_runner.py demo
-```
-
-Image-request examples for `demo`:
-
-```bash
-Athena, show me a picture of ancient Athens at sunset
-Athena, draw a calm owl on a marble column
-```
-
 ## Notes
 
 - `main.py` is the real Pi entrypoint.
-- `demo_runner.py` is only for laptop/off-device testing.
 - Conversation history is kept in memory and trimmed to the last few exchanges.
 - Web search is enabled, but the model is instructed to use it only for current or time-sensitive questions.
 - Image-vs-chat routing is handled by `gpt-5-mini` with regex fallback if the router call fails.
 - Image generation uses OpenAI image generation separately from GPT-5.4 chat.
-- In laptop CLI mode, generated images are saved locally and the file path is printed.
 - The Whisplay driver is still required separately.
