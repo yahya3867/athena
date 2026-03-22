@@ -46,6 +46,8 @@ RESPONSE_FONT_SIZE = 21
 TITLE_FONT_SIZE = 16
 BATTERY_FONT_SIZE = 12
 CLOCK_FONT_SIZE = 34
+IDLE_BATTERY_FONT_SIZE = 15
+IDLE_CLOCK_FONT_SIZE = 42
 ACCENT_BAR_HEIGHT = 3
 POWER_SUPPLY_SYS = "/sys/class/power_supply"
 PISUGAR_SOCKET = "/tmp/pisugar-server.sock"
@@ -507,6 +509,8 @@ class Display:
         except OSError:
             self._battery_font = self._status_sub_font  # fallback so battery corner still draws
         self._clock_font = ImageFont.truetype(_FONT_PATH, CLOCK_FONT_SIZE)
+        self._idle_battery_font = ImageFont.truetype(_FONT_PATH, IDLE_BATTERY_FONT_SIZE)
+        self._idle_clock_font = ImageFont.truetype(_FONT_PATH, IDLE_CLOCK_FONT_SIZE)
         self._emoji_status = _load_emoji_font(STATUS_FONT_SIZE)
         self._emoji_response = _load_emoji_font(RESPONSE_FONT_SIZE)
 
@@ -690,6 +694,15 @@ class Display:
 
     def _draw_battery(self, draw: ImageDraw.ImageDraw):
         """Draw battery percentage and status in top-right corner (small). Always draws something."""
+        self._draw_battery_text(draw, self._battery_font, (120, 120, 120), self._pad_y)
+
+    def _draw_battery_text(
+        self,
+        draw: ImageDraw.ImageDraw,
+        font: ImageFont.FreeTypeFont,
+        fill: tuple[int, int, int],
+        y: int,
+    ):
         pct, status = _read_battery()
         if pct is not None:
             if status == "Charging":
@@ -700,10 +713,9 @@ class Display:
                 label = f"{pct}%"
         else:
             label = "—"  # No battery detected; show placeholder so corner is visible
-        tw = self._battery_font.getlength(label)
+        tw = font.getlength(label)
         x = self._width - tw - self._pad_x
-        y = self._pad_y
-        draw.text((x, y), label, font=self._battery_font, fill=(120, 120, 120))
+        draw.text((x, y), label, font=font, fill=fill)
 
     def _draw(self, image: Image.Image):
         buf = self._image_to_rgb565(image)
@@ -793,43 +805,45 @@ class Display:
         self._draw_battery(draw)
         self._draw(img)
     def set_idle_screen(self):
-        """Draw idle screen with clock, date, battery, and wifi status."""
+        """Draw idle screen with owl mascot, large clock, date, battery, and wifi status."""
         self.reset_transient_state()
-        img = Image.new("RGB", (self._width, self._height), (0, 0, 0))
+        img = self._sprite_frames["idle"].copy()
         draw = ImageDraw.Draw(img)
 
         draw.rectangle((0, 0, self._width, ACCENT_BAR_HEIGHT), fill=(40, 40, 40))
+        draw.rectangle((0, 0, self._width, 60), fill=(0, 0, 0))
+        draw.rectangle((0, self._height - 36, self._width, self._height), fill=(0, 0, 0))
 
-        self._draw_battery(draw)
+        self._draw_battery_text(draw, self._idle_battery_font, (175, 175, 175), 6)
 
         # Wifi indicator (top-left)
         if _wifi_connected():
-            draw.text((self._pad_x, self._pad_y), "\u25cf", font=self._battery_font, fill=(0, 180, 80))
+            draw.text((self._pad_x, 8), "\u25cf", font=self._idle_battery_font, fill=(0, 180, 80))
         else:
-            draw.text((self._pad_x, self._pad_y), "\u25cb", font=self._battery_font, fill=(180, 60, 60))
+            draw.text((self._pad_x, 8), "\u25cb", font=self._idle_battery_font, fill=(180, 60, 60))
 
         now = datetime.now()
 
         # Large clock
         time_str = now.strftime("%H:%M")
-        tw = self._clock_font.getlength(time_str)
+        tw = self._idle_clock_font.getlength(time_str)
         tx = int((self._width - tw) / 2)
-        ty = int(self._height * 0.22)
-        draw.text((tx, ty), time_str, font=self._clock_font, fill=(220, 220, 220))
+        ty = 8
+        draw.text((tx, ty), time_str, font=self._idle_clock_font, fill=(235, 235, 235))
 
         # Date
         date_str = now.strftime("%a, %b %d")
         dw = self._status_sub_font.getlength(date_str)
         dx = int((self._width - dw) / 2)
-        dy = ty + CLOCK_FONT_SIZE + 6
-        draw.text((dx, dy), date_str, font=self._status_sub_font, fill=(100, 100, 100))
+        dy = ty + IDLE_CLOCK_FONT_SIZE + 1
+        draw.text((dx, dy), date_str, font=self._status_sub_font, fill=(135, 135, 135))
 
         # Subtitle
         sub = "Press button to talk"
         sw = self._status_sub_font.getlength(sub)
         sx = int((self._width - sw) / 2)
-        sy = self._height - STATUS_SUB_FONT_SIZE - self._pad_y
-        draw.text((sx, sy), sub, font=self._status_sub_font, fill=(70, 70, 70))
+        sy = self._height - STATUS_SUB_FONT_SIZE - 8
+        draw.text((sx, sy), sub, font=self._status_sub_font, fill=(115, 115, 115))
 
         self._draw(img)
     # ── Sprite-based animated character ─────────────────────────────
