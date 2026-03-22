@@ -54,6 +54,7 @@ PISUGAR_SOCKET = "/tmp/pisugar-server.sock"
 IDLE_BG_COLOR = (186, 224, 255)
 IDLE_PANEL_COLOR = (138, 183, 226)
 IDLE_PANEL_DARK = (102, 150, 198)
+IDLE_FOOTER_COLOR = (116, 181, 90)
 IDLE_PRIMARY_TEXT = (24, 49, 84)
 IDLE_SECONDARY_TEXT = (59, 88, 126)
 
@@ -861,7 +862,7 @@ class Display:
 
         draw.rectangle((0, 0, self._width, ACCENT_BAR_HEIGHT), fill=IDLE_PANEL_DARK)
         draw.rectangle((0, 0, self._width, 60), fill=IDLE_PANEL_COLOR)
-        draw.rectangle((0, self._height - 36, self._width, self._height), fill=IDLE_PANEL_COLOR)
+        draw.rectangle((0, self._height - 36, self._width, self._height), fill=IDLE_FOOTER_COLOR)
 
         self._draw_battery_text(draw, self._idle_battery_font, IDLE_PRIMARY_TEXT, 6)
 
