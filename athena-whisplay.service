@@ -1,7 +1,7 @@
 [Unit]
 Description=Athena Whisplay Voice Assistant
-After=network-online.target
-Wants=network-online.target
+After=network-online.target sound.target wm8960-soundcard.service
+Wants=network-online.target wm8960-soundcard.service
 
 [Service]
 Type=simple
@@ -9,6 +9,7 @@ WorkingDirectory=/home/athena_pi/athena
 EnvironmentFile=/home/athena_pi/athena/.env
 ExecStartPre=/usr/bin/amixer -c 1 sset Speaker 100%
 ExecStart=/usr/bin/python3 /home/athena_pi/athena/main.py
+ExecStartPost=/bin/sh -c '/bin/sleep 3; /usr/bin/amixer -c 1 sset Speaker 100%'
 Restart=on-failure
 RestartSec=5
 

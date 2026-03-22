@@ -525,11 +525,14 @@ class Display:
         self._default_backlight = backlight
         self._sleeping = False
         self._draw_lock = threading.Lock()
+        self._transient_lock = threading.Lock()
         self._cached_paragraphs: list[str] = []
         self._cached_wrapped: list[list[str]] = []
         self._sprite_frames = _generate_sprite_frames()
         self._image_path: str | None = None
         self._image_cache: Image.Image | None = None
+        self._render_generation = 0
+        self._active_transient_kind: str | None = None
 
         self.clear()
 
@@ -552,6 +555,30 @@ class Display:
 
     def is_showing_image(self) -> bool:
         return bool(self._image_path)
+
+    def has_active_transient_renderer(self) -> bool:
+        with self._transient_lock:
+            return self._active_transient_kind is not None
+
+    def _invalidate_transient_renderers(self) -> None:
+        with self._transient_lock:
+            self._render_generation += 1
+            self._active_transient_kind = None
+
+    def _claim_transient_renderer(self, kind: str) -> int:
+        with self._transient_lock:
+            self._render_generation += 1
+            self._active_transient_kind = kind
+            return self._render_generation
+
+    def _transient_generation_active(self, generation: int) -> bool:
+        with self._transient_lock:
+            return generation == self._render_generation
+
+    def _clear_transient_kind_if_current(self, generation: int) -> None:
+        with self._transient_lock:
+            if generation == self._render_generation:
+                self._active_transient_kind = None
 
     def _draw_mixed(
         self,
@@ -752,6 +779,7 @@ class Display:
 
     def reset_transient_state(self) -> None:
         """Clear text/image state and stop transient UI animations."""
+        self._invalidate_transient_renderers()
         self._stop_animations()
         self.clear_image()
         self._response_buf = ""
@@ -859,10 +887,11 @@ class Display:
     def start_character(self, state: str = "done", tts_player=None):
         """Start the animated character loop. tts_player is used for RMS mouth sync."""
         self._stop_animations()
+        generation = self._claim_transient_renderer("character")
         self._char_state = state
         self._char_tts = tts_player
         self._char_stop = threading.Event()
-        t = threading.Thread(target=self._character_loop, daemon=True)
+        t = threading.Thread(target=self._character_loop, args=(generation,), daemon=True)
         t.start()
         self._char_thread = t
 
@@ -875,9 +904,11 @@ class Display:
         if hasattr(self, "_char_thread"):
             self._char_thread.join(timeout=2)
 
-    def _character_loop(self):
+    def _character_loop(self, generation: int):
         tick = 0
         while not self._char_stop.is_set():
+            if not self._transient_generation_active(generation):
+                break
             state = self._char_state
             tts = getattr(self, "_char_tts", None)
 
@@ -950,11 +981,14 @@ class Display:
                     max_x=self._width - self._pad_x,
                 )
 
+            if not self._transient_generation_active(generation):
+                break
             self._draw_battery(draw)
             self._draw(img)
 
             tick += 1
             self._char_stop.wait(timeout=0.1)
+        self._clear_transient_kind_if_current(generation)
 
     def _stop_animations(self):
         """Stop any running animation (spinner or character)."""
@@ -962,8 +996,10 @@ class Display:
         self.stop_character()
 
     def start_spinner(self, label: str = "Thinking", color: tuple[int, int, int] = (255, 220, 50)):
+        self._stop_animations()
+        generation = self._claim_transient_renderer("spinner")
         self._spinner_stop = threading.Event()
-        t = threading.Thread(target=self._spin_loop, args=(label, color), daemon=True)
+        t = threading.Thread(target=self._spin_loop, args=(generation, label, color), daemon=True)
         t.start()
         self._spinner_thread = t
 
@@ -973,10 +1009,12 @@ class Display:
         if hasattr(self, "_spinner_thread"):
             self._spinner_thread.join(timeout=2)
 
-    def _spin_loop(self, label: str, color: tuple[int, int, int]):
+    def _spin_loop(self, generation: int, label: str, color: tuple[int, int, int]):
         frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
         i = 0
         while not self._spinner_stop.is_set():
+            if not self._transient_generation_active(generation):
+                break
             text = f"{frames[i]}  {label}"
             img = Image.new("RGB", (self._width, self._height), (0, 0, 0))
             draw = ImageDraw.Draw(img)
@@ -992,10 +1030,13 @@ class Display:
             sub_w = self._status_sub_font.getlength(sub)
             sx = max(self._pad_x, int((self._width - sub_w) / 2))
             draw.text((sx, y + STATUS_FONT_SIZE + 6), sub, font=self._status_sub_font, fill=(90, 90, 90))
+            if not self._transient_generation_active(generation):
+                break
             self._draw_battery(draw)
             self._draw(img)
             i = (i + 1) % len(frames)
             self._spinner_stop.wait(timeout=0.12)
+        self._clear_transient_kind_if_current(generation)
 
     def set_response_text(self, text: str):
         """Draw full wrapped response text, scrolled to bottom."""

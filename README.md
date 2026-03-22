@@ -122,12 +122,21 @@ sudo journalctl -u athena-whisplay -f
 
 This service:
 
-- waits for `network-online.target`
+- waits for `network-online.target` and WM8960 audio readiness
 - forces Whisplay speaker volume to `100%` before startup
+- reapplies Whisplay speaker volume to `100%` a few seconds after startup for reliability
 - runs Athena with system Python as root
 - restarts automatically if Athena exits unexpectedly
 
 After it is enabled once, Athena should start automatically on every boot without SSH.
+
+Useful service debug commands:
+
+```bash
+sudo systemctl status athena-whisplay
+sudo journalctl -u athena-whisplay -b --no-pager
+amixer -c 1 sget Speaker
+```
 
 Or use `sync.sh` from your laptop to deploy and restart it on the Pi.
 

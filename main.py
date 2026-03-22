@@ -337,6 +337,7 @@ class Assistant:
                     not self.display.is_sleeping
                     and self.ptt.state == State.IDLE
                     and not worker_busy
+                    and not self.display.has_active_transient_renderer()
                     and not self.display.is_showing_image()
                     and time.monotonic() - self._last_idle_refresh > 30
                 ):
