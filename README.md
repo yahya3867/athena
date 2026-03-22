@@ -15,22 +15,23 @@ Core device flow:
 ## Workflow Diagram
 
 ```mermaid
+%%{init: {'themeVariables': {'fontSize': '11px'}}}%%
 flowchart TD
-    A["Press button on Athena"] --> B["Record audio on Pi\n(arecord + Whisplay UI)"]
-    B --> C["Transcribe speech\n/v1/audio/transcriptions\n gpt-4o-mini-transcribe"]
-    C --> D["Route request\n/v1/responses\n gpt-5-mini"]
+    A["Press button"] --> B["Record audio\narecord + Whisplay UI"]
+    B --> C["Transcribe\n/v1/audio/transcriptions\n gpt-4o-mini-transcribe"]
+    C --> D["Route intent\n/v1/responses\n gpt-5-mini"]
     D --> E{"Chat or visual?"}
 
-    E -->|"Chat"| F["Generate reply\n/v1/responses\n gpt-5.4 + short history"]
-    F --> G["Optional web search\nfor current info"]
+    E -->|"Chat"| F["Generate reply\n/v1/responses\n gpt-5.4 + history"]
+    F --> G["Optional web search"]
     G --> H["Speak reply\n/v1/audio/speech\n gpt-4o-mini-tts"]
-    H --> I["Show + read answer aloud\non Whisplay"]
+    H --> I["Show + speak answer"]
 
-    E -->|"Visual"| J["Rewrite spoken request\ninto an image prompt"]
+    E -->|"Visual"| J["Rewrite as image prompt"]
     J --> K["Generate image\n gpt-image-1.5"]
-    K --> L["Display full-screen picture,\nmap, or diagram"]
+    K --> L["Show image, map,\nor diagram"]
 
-    I --> M["Return to idle owl screen"]
+    I --> M["Return to idle"]
     L --> M
     M --> A
 ```
