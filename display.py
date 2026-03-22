@@ -770,6 +770,16 @@ class Display:
             image = image.crop((0, top, img_w, top + new_h))
         return image.resize((self._width, self._height), Image.LANCZOS)
 
+    def _paste_sprite_overlay(self, base: Image.Image, sprite: Image.Image, xy: tuple[int, int]) -> None:
+        overlay = sprite.convert("RGBA")
+        overlay.putdata(
+            [
+                (r, g, b, 0 if (r, g, b) == (0, 0, 0) else 255)
+                for (r, g, b, _a) in overlay.getdata()
+            ]
+        )
+        base.paste(overlay, xy, overlay)
+
     def show_image(self, image_path: str) -> None:
         self.reset_transient_state()
         if not os.path.isfile(image_path):
@@ -846,7 +856,7 @@ class Display:
         """Draw idle screen with owl mascot, large clock, date, battery, and wifi status."""
         self.reset_transient_state()
         img = Image.new("RGB", (self._width, self._height), IDLE_BG_COLOR)
-        img.paste(self._sprite_frames["idle"], (0, 64))
+        self._paste_sprite_overlay(img, self._sprite_frames["idle"], (0, 64))
         draw = ImageDraw.Draw(img)
 
         draw.rectangle((0, 0, self._width, ACCENT_BAR_HEIGHT), fill=IDLE_PANEL_DARK)
