@@ -62,6 +62,7 @@ SILENCE_RMS_THRESHOLD = float(os.environ.get("SILENCE_RMS_THRESHOLD", "200"))
 ENABLE_TTS = os.environ.get("ENABLE_TTS", "true").lower() in ("1", "true", "yes")
 LCD_BACKLIGHT = int(os.environ.get("LCD_BACKLIGHT", "70"))
 UI_MAX_FPS = int(os.environ.get("UI_MAX_FPS", "4"))
+DISPLAY_SLEEP_TIMEOUT = int(os.environ.get("DISPLAY_SLEEP_TIMEOUT", "300"))
 DRY_RUN = not OPENAI_API_KEY
 
 OUTPUT_DIR = BASE_DIR / "output"
@@ -98,4 +99,5 @@ def print_config() -> None:
     print(f"LCD_BACKLIGHT          = {LCD_BACKLIGHT}")
     print(f"HISTORY_LENGTH         = {CONVERSATION_HISTORY_LENGTH}")
     print(f"SILENCE_RMS_THRESHOLD  = {SILENCE_RMS_THRESHOLD}")
+    print(f"DISPLAY_SLEEP_TIMEOUT  = {DISPLAY_SLEEP_TIMEOUT}")
     print(f"OPENAI_API_KEY set     = {bool(OPENAI_API_KEY)}")

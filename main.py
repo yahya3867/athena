@@ -48,7 +48,7 @@ class Assistant:
         self._dismiss = threading.Event()
         self._worker_gen = 0
         self._response_hold_timeout = 12
-        self._sleep_timeout = 60
+        self._sleep_timeout = config.DISPLAY_SLEEP_TIMEOUT
         self._last_activity = time.monotonic()
         self._last_idle_refresh = 0.0
         self._state_entered_at = 0.0
