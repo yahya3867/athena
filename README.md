@@ -16,26 +16,26 @@ Core device flow:
 
 ```mermaid
 flowchart TD
-    A["Press Whisplay button"] --> B["Record audio with arecord"]
-    B --> C["Speech to text<br/>OpenAI `/v1/audio/transcriptions`<br/>model: `gpt-4o-mini-transcribe`"]
-    C --> D["Intent routing<br/>OpenAI `/v1/responses`<br/>model: `gpt-5-mini`"]
+    A["Press button"] --> B["Record audio\narecord"]
+    B --> C["Speech to text\n/v1/audio/transcriptions\ngpt-4o-mini-transcribe"]
+    C --> D["Intent routing\n/v1/responses\ngpt-5-mini"]
 
-    D -->|"mode = chat"| E["Chat response<br/>OpenAI `/v1/responses`<br/>model: `gpt-5.4`"]
-    E --> F{"Need fresh/current info?"}
-    F -->|"No"| G["Stream short answer text to Whisplay"]
-    F -->|"Yes"| H["Use OpenAI web search tool<br/>inside `/v1/responses`"]
+    D -->|"chat"| E["Chat response\n/v1/responses\ngpt-5.4"]
+    E --> F{"Fresh info needed?"}
+    F -->|"No"| G["Stream short answer\nto Whisplay"]
+    F -->|"Yes"| H["OpenAI web search\ninside /v1/responses"]
     H --> G
     G --> I{"TTS enabled?"}
-    I -->|"Yes"| J["Text to speech<br/>OpenAI `/v1/audio/speech`<br/>model: `gpt-4o-mini-tts`"]
-    J --> K["Play audio on wm8960 speaker"]
-    I -->|"No"| L["Hold answer on screen"]
+    I -->|"Yes"| J["Text to speech\n/v1/audio/speech\ngpt-4o-mini-tts"]
+    J --> K["Play audio\nwm8960 speaker"]
+    I -->|"No"| L["Keep answer\non screen"]
     K --> L
-    L --> M["Auto-clear back to idle owl screen"]
+    L --> M["Return to idle\nowl screen"]
 
-    D -->|"mode = image"| N["Image prompt rewrite<br/>map / diagram / picture / visual"]
-    N --> O["Image generation<br/>OpenAI `/v1/responses` tool or `/v1/images/generations`<br/>model: `gpt-image-1.5`"]
-    O --> P["Show fullscreen image on Whisplay"]
-    P --> Q["No speech for image turns"]
+    D -->|"image"| N["Rewrite image prompt\nmap, diagram, picture"]
+    N --> O["Generate image\ngpt-image-1.5"]
+    O --> P["Show full-screen image\non Whisplay"]
+    P --> Q["Image turn is display-only\nno speech"]
     Q --> M
 ```
 
