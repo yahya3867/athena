@@ -140,3 +140,9 @@ amixer -c 1 sget Speaker
 ```
 
 Or use `sync.sh` from your laptop to deploy and restart it on the Pi.
+
+## Contributors
+
+- **Yahya Masri**
+- **Tuga Wangjie**
+- **Hamza Essaifi**
