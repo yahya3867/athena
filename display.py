@@ -529,6 +529,7 @@ class Display:
         self._cached_paragraphs: list[str] = []
         self._cached_wrapped: list[list[str]] = []
         self._sprite_frames = _generate_sprite_frames()
+        self._blank_buf = [0] * (self._width * self._height * 2)
         self._image_path: str | None = None
         self._image_cache: Image.Image | None = None
         self._render_generation = 0
@@ -1146,7 +1147,9 @@ class Display:
 
     def clear(self):
         with self._draw_lock:
-            self.board.fill_screen(0x0000)
+            # Use the same full-frame draw path as the rest of the UI so stale
+            # pixels from fullscreen images cannot survive in clipped strips.
+            self.board.draw_image(0, 0, self._width, self._height, self._blank_buf)
 
     def set_backlight(self, level: int):
         self.board.set_backlight(level)
