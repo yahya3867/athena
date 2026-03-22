@@ -779,12 +779,16 @@ class Display:
 
     def reset_transient_state(self) -> None:
         """Clear text/image state and stop transient UI animations."""
+        had_visual = bool(self._image_path) or bool(self._response_buf)
         self._invalidate_transient_renderers()
         self._stop_animations()
         self.clear_image()
         self._response_buf = ""
         self._cached_paragraphs = []
         self._cached_wrapped = []
+        self._last_draw_time = 0.0
+        if had_visual and not self._sleeping:
+            self.clear()
 
     def set_status(
         self,
