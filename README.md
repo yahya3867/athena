@@ -12,6 +12,42 @@ Core device flow:
 6. Speak the reply with `gpt-4o-mini-tts`
 7. Show status and response text on the Whisplay display
 
+## Workflow Diagram
+
+```mermaid
+flowchart TD
+    A["Press Whisplay button"] --> B["Record audio with arecord"]
+    B --> C["Speech to text<br/>OpenAI `/v1/audio/transcriptions`<br/>model: `gpt-4o-mini-transcribe`"]
+    C --> D["Intent routing<br/>OpenAI `/v1/responses`<br/>model: `gpt-5-mini`"]
+
+    D -->|"mode = chat"| E["Chat response<br/>OpenAI `/v1/responses`<br/>model: `gpt-5.4`"]
+    E --> F{"Need fresh/current info?"}
+    F -->|"No"| G["Stream short answer text to Whisplay"]
+    F -->|"Yes"| H["Use OpenAI web search tool<br/>inside `/v1/responses`"]
+    H --> G
+    G --> I{"TTS enabled?"}
+    I -->|"Yes"| J["Text to speech<br/>OpenAI `/v1/audio/speech`<br/>model: `gpt-4o-mini-tts`"]
+    J --> K["Play audio on wm8960 speaker"]
+    I -->|"No"| L["Hold answer on screen"]
+    K --> L
+    L --> M["Auto-clear back to idle owl screen"]
+
+    D -->|"mode = image"| N["Image prompt rewrite<br/>map / diagram / picture / visual"]
+    N --> O["Image generation<br/>OpenAI `/v1/responses` tool or `/v1/images/generations`<br/>model: `gpt-image-1.5`"]
+    O --> P["Show fullscreen image on Whisplay"]
+    P --> Q["No speech for image turns"]
+    Q --> M
+```
+
+### Scenario Notes
+
+- Normal fact question:
+  `STT -> intent router -> gpt-5.4 chat -> optional TTS -> screen`
+- Current-events or weather question:
+  `STT -> intent router -> gpt-5.4 chat + web search -> optional TTS -> screen`
+- Visual request like image, map, or diagram:
+  `STT -> intent router -> gpt-image-1.5 -> fullscreen display only`
+
 Image mode:
 
 - Explicit image requests such as “show me a picture of …” or “draw …” use `gpt-image-1.5`
