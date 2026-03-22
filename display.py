@@ -57,6 +57,12 @@ IDLE_PANEL_DARK = (102, 150, 198)
 IDLE_FOOTER_COLOR = (116, 181, 90)
 IDLE_PRIMARY_TEXT = (24, 49, 84)
 IDLE_SECONDARY_TEXT = (59, 88, 126)
+IDLE_FOOTER_TEXT = (36, 83, 28)
+SCENE_PANEL_FILL = (220, 236, 248)
+SCENE_PANEL_STROKE = (120, 162, 205)
+OWL_SCENE_POS = (0, 64)
+TOP_PANEL_HEIGHT = 60
+FOOTER_HEIGHT = 36
 
 
 def _load_emoji_font(size: int) -> ImageFont.FreeTypeFont | None:
@@ -494,10 +500,6 @@ def _generate_sprite_frames() -> dict[str, Image.Image]:
     return frames
 
 
-# Idle / done bob cycle (pixel offsets for gentle breathing)
-_BOB_CYCLE = [0, 0, 0, 0, 1, 2, 3, 4, 4, 4, 3, 2, 1, 0, 0, 0]
-
-
 class Display:
     def __init__(self, backlight=70):
         self.board = WhisPlayBoard()
@@ -781,6 +783,104 @@ class Display:
         )
         base.paste(overlay, xy, overlay)
 
+    def _contrasting_scene_color(self, color: tuple[int, int, int]) -> tuple[int, int, int]:
+        if sum(color) / 3 > 150:
+            return tuple(max(0, int(c * 0.45)) for c in color)
+        return color
+
+    def _draw_wifi_indicator(self, draw: ImageDraw.ImageDraw) -> None:
+        if _wifi_connected():
+            draw.text((self._pad_x, 8), "\u25cf", font=self._idle_battery_font, fill=(0, 150, 70))
+        else:
+            draw.text((self._pad_x, 8), "\u25cb", font=self._idle_battery_font, fill=(180, 60, 60))
+
+    def _draw_footer_text(
+        self,
+        draw: ImageDraw.ImageDraw,
+        text: str,
+        *,
+        fill: tuple[int, int, int] = IDLE_FOOTER_TEXT,
+    ) -> None:
+        if not text:
+            return
+        text = self._truncate_text(text, self._status_sub_font, self._width - self._pad_x * 2)
+        tw = self._status_sub_font.getlength(text)
+        tx = int((self._width - tw) / 2)
+        ty = self._height - STATUS_SUB_FONT_SIZE - 8
+        draw.text((tx, ty), text, font=self._status_sub_font, fill=fill)
+
+    def _draw_text_panel(
+        self,
+        draw: ImageDraw.ImageDraw,
+        text: str,
+        *,
+        font: ImageFont.FreeTypeFont,
+        emoji_font: ImageFont.FreeTypeFont | None,
+        box: tuple[int, int, int, int],
+        text_fill: tuple[int, int, int],
+        panel_fill: tuple[int, int, int] = SCENE_PANEL_FILL,
+        outline: tuple[int, int, int] = SCENE_PANEL_STROKE,
+    ) -> None:
+        left, top, right, bottom = box
+        draw.rounded_rectangle(box, radius=14, fill=panel_fill, outline=outline, width=2)
+        inner_w = right - left - 20
+        line_h = int(font.size) + 4
+        max_lines = max(1, (bottom - top - 18) // line_h)
+        lines = self._wrap_pixels(text, font, inner_w, emoji_font)[:max_lines]
+        total_h = len(lines) * line_h
+        y = top + max(8, int(((bottom - top) - total_h) / 2))
+        for line in lines:
+            tw = self._text_width_mixed(line, font, emoji_font) if emoji_font else font.getlength(line)
+            x = max(left + 10, int(left + ((right - left) - tw) / 2))
+            self._draw_mixed(
+                draw,
+                (x, y),
+                line,
+                font,
+                emoji_font,
+                text_fill,
+                max_x=right - 10,
+            )
+            y += line_h
+
+    def _build_owl_scene(
+        self,
+        sprite: Image.Image,
+        *,
+        accent_color: tuple[int, int, int],
+        footer_text: str | None = None,
+        show_clock: bool = False,
+    ) -> tuple[Image.Image, ImageDraw.ImageDraw]:
+        img = Image.new("RGB", (self._width, self._height), IDLE_BG_COLOR)
+        self._paste_sprite_overlay(img, sprite, OWL_SCENE_POS)
+        draw = ImageDraw.Draw(img)
+
+        draw.rectangle((0, 0, self._width, ACCENT_BAR_HEIGHT), fill=accent_color)
+        draw.rectangle((0, 0, self._width, TOP_PANEL_HEIGHT), fill=IDLE_PANEL_COLOR)
+        draw.rectangle((0, self._height - FOOTER_HEIGHT, self._width, self._height), fill=IDLE_FOOTER_COLOR)
+
+        self._draw_battery_text(draw, self._idle_battery_font, IDLE_PRIMARY_TEXT, 6)
+        self._draw_wifi_indicator(draw)
+
+        if show_clock:
+            now = datetime.now()
+            time_str = now.strftime("%H:%M")
+            tw = self._idle_clock_font.getlength(time_str)
+            tx = int((self._width - tw) / 2)
+            ty = 8
+            draw.text((tx, ty), time_str, font=self._idle_clock_font, fill=IDLE_PRIMARY_TEXT)
+
+            date_str = now.strftime("%a, %b %d")
+            dw = self._status_sub_font.getlength(date_str)
+            dx = int((self._width - dw) / 2)
+            dy = ty + IDLE_CLOCK_FONT_SIZE + 1
+            draw.text((dx, dy), date_str, font=self._status_sub_font, fill=IDLE_SECONDARY_TEXT)
+
+        if footer_text:
+            self._draw_footer_text(draw, footer_text)
+
+        return img, draw
+
     def show_image(self, image_path: str) -> None:
         self.reset_transient_state()
         if not os.path.isfile(image_path):
@@ -816,85 +916,31 @@ class Display:
     ):
         """Show a status screen: optional accent bar, main text, optional subtitle."""
         self.reset_transient_state()
-        img = Image.new("RGB", (self._width, self._height), (0, 0, 0))
-        draw = ImageDraw.Draw(img)
-
-        y_offset = 0
-        if accent_color is not None:
-            draw.rectangle(
-                (0, 0, self._width, ACCENT_BAR_HEIGHT),
-                fill=accent_color,
-            )
-            y_offset = ACCENT_BAR_HEIGHT + 6
-
-        usable_w = self._width - self._pad_x * 2
-        lines = self._wrap_pixels(text, self._status_font, usable_w, self._emoji_status)
-        line_h = STATUS_FONT_SIZE + 4
-        sub_h = STATUS_SUB_FONT_SIZE + 2 if subtitle else 0
-        total_h = line_h * len(lines) + sub_h
-        y = max(self._pad_y + y_offset, (self._height - total_h) // 2)
-
-        for line in lines:
-            tw = self._text_width_mixed(line, self._status_font, self._emoji_status)
-            x = max(self._pad_x, int((self._width - tw) / 2))
-            self._draw_mixed(
-                draw, (x, y), line, self._status_font, self._emoji_status, color,
-                max_x=self._width - self._pad_x,
-            )
-            y += line_h
-            if y + line_h > self._height:
-                break
-
-        if subtitle and y + STATUS_SUB_FONT_SIZE <= self._height:
-            sub = self._truncate_text(subtitle, self._status_sub_font, usable_w)
-            sub_w = self._status_sub_font.getlength(sub)
-            x = max(self._pad_x, int((self._width - sub_w) / 2))
-            draw.text((x, y), sub, font=self._status_sub_font, fill=(100, 100, 100))
-
-        self._draw_battery(draw)
+        img, draw = self._build_owl_scene(
+            self._sprite_frames["happy"],
+            accent_color=accent_color or IDLE_PANEL_DARK,
+            footer_text=subtitle,
+        )
+        self._draw_text_panel(
+            draw,
+            text,
+            font=self._status_font,
+            emoji_font=self._emoji_status,
+            box=(16, 92, self._width - 16, 168),
+            text_fill=self._contrasting_scene_color(color),
+            outline=accent_color or SCENE_PANEL_STROKE,
+        )
         self._draw(img)
+
     def set_idle_screen(self):
         """Draw idle screen with owl mascot, large clock, date, battery, and wifi status."""
         self.reset_transient_state()
-        img = Image.new("RGB", (self._width, self._height), IDLE_BG_COLOR)
-        self._paste_sprite_overlay(img, self._sprite_frames["idle"], (0, 64))
-        draw = ImageDraw.Draw(img)
-
-        draw.rectangle((0, 0, self._width, ACCENT_BAR_HEIGHT), fill=IDLE_PANEL_DARK)
-        draw.rectangle((0, 0, self._width, 60), fill=IDLE_PANEL_COLOR)
-        draw.rectangle((0, self._height - 36, self._width, self._height), fill=IDLE_FOOTER_COLOR)
-
-        self._draw_battery_text(draw, self._idle_battery_font, IDLE_PRIMARY_TEXT, 6)
-
-        # Wifi indicator (top-left)
-        if _wifi_connected():
-            draw.text((self._pad_x, 8), "\u25cf", font=self._idle_battery_font, fill=(0, 180, 80))
-        else:
-            draw.text((self._pad_x, 8), "\u25cb", font=self._idle_battery_font, fill=(180, 60, 60))
-
-        now = datetime.now()
-
-        # Large clock
-        time_str = now.strftime("%H:%M")
-        tw = self._idle_clock_font.getlength(time_str)
-        tx = int((self._width - tw) / 2)
-        ty = 8
-        draw.text((tx, ty), time_str, font=self._idle_clock_font, fill=IDLE_PRIMARY_TEXT)
-
-        # Date
-        date_str = now.strftime("%a, %b %d")
-        dw = self._status_sub_font.getlength(date_str)
-        dx = int((self._width - dw) / 2)
-        dy = ty + IDLE_CLOCK_FONT_SIZE + 1
-        draw.text((dx, dy), date_str, font=self._status_sub_font, fill=IDLE_SECONDARY_TEXT)
-
-        # Subtitle
-        sub = "Press button to talk"
-        sw = self._status_sub_font.getlength(sub)
-        sx = int((self._width - sw) / 2)
-        sy = self._height - STATUS_SUB_FONT_SIZE - 8
-        draw.text((sx, sy), sub, font=self._status_sub_font, fill=IDLE_SECONDARY_TEXT)
-
+        img, _draw = self._build_owl_scene(
+            self._sprite_frames["idle"],
+            accent_color=IDLE_PANEL_DARK,
+            footer_text="Press button to talk",
+            show_clock=True,
+        )
         self._draw(img)
     # ── Sprite-based animated character ─────────────────────────────
 
@@ -951,32 +997,17 @@ class Display:
                 key += "_blink"
 
             sprite = self._sprite_frames.get(key, self._sprite_frames["idle"])
-
-            # Gentle bob for idle / done states
-            bob_px = 0
-            if state in ("idle", "done"):
-                bob_px = _BOB_CYCLE[tick % len(_BOB_CYCLE)]
-
-            if bob_px > 0:
-                img = Image.new("RGB", (self._width, self._height), (0, 0, 0))
-                img.paste(sprite.crop((0, bob_px, self._width, self._height)), (0, 0))
-            else:
-                img = sprite.copy()
-
-            draw = ImageDraw.Draw(img)
-
-            draw.rectangle(
-                (0, 0, self._width, ACCENT_BAR_HEIGHT),
-                fill=self._ACCENT_COLORS.get(state, (40, 40, 40)),
+            footer_label = {
+                "listening": "Listening…",
+                "thinking": "Thinking…",
+                "talking": "Speaking…",
+                "done": "Ready",
+            }.get(state, "")
+            img, draw = self._build_owl_scene(
+                sprite,
+                accent_color=self._ACCENT_COLORS.get(state, IDLE_PANEL_DARK),
+                footer_text=footer_label,
             )
-
-            label = {"listening": "Listening…", "thinking": "Thinking…"}.get(state, "")
-            if label:
-                lw = self._status_sub_font.getlength(label)
-                draw.text(
-                    (int((self._width - lw) / 2), 200),
-                    label, font=self._status_sub_font, fill=(120, 120, 120),
-                )
 
             # Subtitle: single line showing the current fragment being spoken
             sub_text = ""
@@ -984,27 +1015,17 @@ class Display:
                 sub_text = tts.current_text
             if sub_text:
                 sub_text = _clean_markdown(sub_text)
-                usable_w = self._width - self._pad_x * 2
-                sub_font = self._response_font
-                sub_y = 200
-                draw.rectangle(
-                    (0, sub_y - 2, self._width, self._height),
-                    fill=(0, 0, 0),
-                )
-                sub_text = self._truncate_text(
-                    sub_text, sub_font, usable_w, self._emoji_response,
-                )
-                sw = self._text_width_mixed(sub_text, sub_font, self._emoji_response)
-                sx = max(self._pad_x, int((self._width - sw) / 2))
-                self._draw_mixed(
-                    draw, (sx, sub_y), sub_text,
-                    sub_font, self._emoji_response, (255, 255, 255),
-                    max_x=self._width - self._pad_x,
+                self._draw_text_panel(
+                    draw,
+                    sub_text,
+                    font=self._response_font,
+                    emoji_font=self._emoji_response,
+                    box=(16, self._height - FOOTER_HEIGHT - 42, self._width - 16, self._height - FOOTER_HEIGHT - 6),
+                    text_fill=IDLE_PRIMARY_TEXT,
                 )
 
             if not self._transient_generation_active(generation):
                 break
-            self._draw_battery(draw)
             self._draw(img)
 
             tick += 1
@@ -1037,23 +1058,23 @@ class Display:
             if not self._transient_generation_active(generation):
                 break
             text = f"{frames[i]}  {label}"
-            img = Image.new("RGB", (self._width, self._height), (0, 0, 0))
-            draw = ImageDraw.Draw(img)
-            draw.rectangle((0, 0, self._width, ACCENT_BAR_HEIGHT), fill=color)
-            tw = self._text_width_mixed(text, self._status_font, self._emoji_status)
-            x = max(self._pad_x, int((self._width - tw) / 2))
-            y = (self._height - STATUS_FONT_SIZE) // 2
-            self._draw_mixed(
-                draw, (x, y), text, self._status_font, self._emoji_status, color,
-                max_x=self._width - self._pad_x,
+            sprite = self._sprite_frames["think1" if (i % 2 == 0) else "think2"]
+            img, draw = self._build_owl_scene(
+                sprite,
+                accent_color=color,
+                footer_text="Getting answer…",
             )
-            sub = "Getting answer…"
-            sub_w = self._status_sub_font.getlength(sub)
-            sx = max(self._pad_x, int((self._width - sub_w) / 2))
-            draw.text((sx, y + STATUS_FONT_SIZE + 6), sub, font=self._status_sub_font, fill=(90, 90, 90))
+            self._draw_text_panel(
+                draw,
+                text,
+                font=self._status_font,
+                emoji_font=self._emoji_status,
+                box=(18, 96, self._width - 18, 156),
+                text_fill=self._contrasting_scene_color(color),
+                outline=color,
+            )
             if not self._transient_generation_active(generation):
                 break
-            self._draw_battery(draw)
             self._draw(img)
             i = (i + 1) % len(frames)
             self._spinner_stop.wait(timeout=0.12)
