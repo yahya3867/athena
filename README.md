@@ -1,7 +1,9 @@
 # Athena
 
 Athena Whisplay voice assistant. This is now the Pi-target codebase: clone it onto the Raspberry Pi, add your `.env`, and run `main.py` or the included service.
-
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/2a8ee299-3dc4-4a6c-ade3-f69c12544b75" width="400"/>
+</p>
 Core device flow:
 
 1. Press button to record audio
