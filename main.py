@@ -289,6 +289,7 @@ class Assistant:
     ) -> None:
         was_streaming = self.ptt.state == State.STREAMING
         self.ptt.state = State.STREAMING
+        response_hold = self._response_hold_timeout
         if self._tts:
             if not was_streaming:
                 self.display.set_character_state("talking")
@@ -300,11 +301,10 @@ class Assistant:
             if self._is_stale(my_gen):
                 return
             self.display.stop_character()
-            self.display.set_response_text(full_response)
+            response_hold = self.display.set_response_text(full_response) or self._response_hold_timeout
         else:
             self.display.stop_spinner()
-            self.display.set_response_text(full_response)
-            self.display.flush_response()
+            response_hold = self.display.set_response_text(full_response) or self._response_hold_timeout
 
         log.info("response complete -- holding on screen")
 
@@ -315,7 +315,7 @@ class Assistant:
             self._conversation_history = self._conversation_history[-max_msgs:]
 
         self._dismiss.clear()
-        self._dismiss.wait(timeout=self._response_hold_timeout)
+        self._dismiss.wait(timeout=response_hold)
 
         if self._is_stale(my_gen):
             return

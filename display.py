@@ -42,7 +42,7 @@ _EMOJI_FONT_PATHS = [
 
 STATUS_FONT_SIZE = 20
 STATUS_SUB_FONT_SIZE = 15
-RESPONSE_FONT_SIZE = 21
+RESPONSE_FONT_SIZE = 25
 TITLE_FONT_SIZE = 16
 BATTERY_FONT_SIZE = 12
 CLOCK_FONT_SIZE = 34
@@ -63,6 +63,9 @@ SCENE_PANEL_STROKE = (120, 162, 205)
 OWL_SCENE_POS = (0, 64)
 TOP_PANEL_HEIGHT = 60
 FOOTER_HEIGHT = 36
+RESPONSE_SCROLL_SPEED = 22.0
+RESPONSE_SCROLL_TOP_HOLD = 1.4
+RESPONSE_SCROLL_END_HOLD = 2.2
 
 
 def _load_emoji_font(size: int) -> ImageFont.FreeTypeFont | None:
@@ -536,6 +539,9 @@ class Display:
         self._transient_lock = threading.Lock()
         self._cached_paragraphs: list[str] = []
         self._cached_wrapped: list[list[str]] = []
+        self._response_scroll_stop = threading.Event()
+        self._response_scroll_thread: threading.Thread | None = None
+        self._response_presentation_duration = 0.0
         self._sprite_frames = _generate_sprite_frames()
         self._blank_buf = [0] * (self._width * self._height * 2)
         self._image_path: str | None = None
@@ -908,11 +914,13 @@ class Display:
         """Clear text/image state and stop transient UI animations."""
         had_visual = bool(self._image_path) or bool(self._response_buf)
         self._invalidate_transient_renderers()
+        self._stop_response_scroll()
         self._stop_animations()
         self.clear_image()
         self._response_buf = ""
         self._cached_paragraphs = []
         self._cached_wrapped = []
+        self._response_presentation_duration = 0.0
         self._last_draw_time = 0.0
         if had_visual and not self._sleeping:
             self.clear()
@@ -1019,24 +1027,6 @@ class Display:
                 footer_text=footer_label,
             )
 
-            # Subtitle: single line showing the current fragment being spoken
-            sub_text = ""
-            if tts:
-                sub_text = tts.get_visible_text(max_chars=64)
-            if sub_text:
-                sub_text = _clean_markdown(sub_text)
-                self._draw_text_panel(
-                    draw,
-                    sub_text,
-                    font=self._response_font,
-                    emoji_font=self._emoji_response,
-                    box=(16, self._height - FOOTER_HEIGHT - 60, self._width - 16, self._height - FOOTER_HEIGHT - 6),
-                    text_fill=IDLE_PRIMARY_TEXT,
-                    align="left",
-                    vertical_align="top",
-                    prefer_tail=True,
-                )
-
             if not self._transient_generation_active(generation):
                 break
             self._draw(img)
@@ -1093,11 +1083,31 @@ class Display:
             self._spinner_stop.wait(timeout=0.12)
         self._clear_transient_kind_if_current(generation)
 
-    def set_response_text(self, text: str):
-        """Draw full wrapped response text, scrolled to bottom."""
+    def set_response_text(self, text: str) -> float:
+        """Draw final response text and start auto-scroll if needed."""
         self.reset_transient_state()
         self._response_buf = text
-        self._render_response(force=True)
+        lines, line_h, content_top, content_bottom = self._response_layout(text)
+        visible_height = max(1, content_bottom - content_top)
+        total_height = max(0, len(lines) * line_h)
+        scroll_px = max(0.0, float(total_height - visible_height))
+        self._render_response_frame(lines, line_h=line_h, offset_px=0.0)
+
+        if scroll_px <= 0:
+            self._response_presentation_duration = 0.0
+            return 0.0
+
+        scroll_duration = scroll_px / RESPONSE_SCROLL_SPEED
+        total_duration = RESPONSE_SCROLL_TOP_HOLD + scroll_duration + RESPONSE_SCROLL_END_HOLD
+        self._response_presentation_duration = total_duration
+        self._response_scroll_stop = threading.Event()
+        self._response_scroll_thread = threading.Thread(
+            target=self._response_scroll_loop,
+            args=(lines, line_h, scroll_px),
+            daemon=True,
+        )
+        self._response_scroll_thread.start()
+        return total_duration
 
     def append_response(self, delta: str):
         """Append a streaming delta and redraw (throttled)."""
@@ -1114,78 +1124,96 @@ class Display:
             return
         self._last_draw_time = now
 
+        lines, line_h, _content_top, _content_bottom = self._response_layout(self._response_buf)
+        max_visible = max(1, (_content_bottom - _content_top) // line_h)
+        if len(lines) > max_visible:
+            lines = lines[-max_visible:]
+        self._render_response_frame(lines, line_h=line_h, offset_px=0.0)
+
+    def _response_layout(self, text: str) -> tuple[list[str], int, int, int]:
+        usable_w = self._width - self._pad_x * 2
+        content_top = self._pad_y + ACCENT_BAR_HEIGHT + 4
+        content_bottom = self._height - self._pad_y
+        clean = _clean_markdown(text)
+        paragraphs = clean.split("\n")
+
+        lines: list[str] = []
+        for para in paragraphs:
+            stripped = para.strip()
+            if not stripped:
+                lines.append("")
+                continue
+            lines.extend(self._wrap_pixels(stripped, self._response_font, usable_w, self._emoji_response))
+
+        line_h = RESPONSE_FONT_SIZE + 6
+        return lines, line_h, content_top, content_bottom
+
+    def _render_response_frame(
+        self,
+        lines: list[str],
+        *,
+        line_h: int,
+        offset_px: float,
+    ) -> None:
+        content_top = self._pad_y + ACCENT_BAR_HEIGHT + 4
+        content_bottom = self._height - self._pad_y
+
         img = Image.new("RGB", (self._width, self._height), (0, 0, 0))
         draw = ImageDraw.Draw(img)
 
         draw.rectangle((0, 0, self._width, ACCENT_BAR_HEIGHT), fill=(0, 160, 80))
 
-        line_spacing = 4
-        usable_w = self._width - self._pad_x * 2
-        content_top = self._pad_y + ACCENT_BAR_HEIGHT + 4
-        content_bottom = self._height - self._pad_y
-
-        clean = _clean_markdown(self._response_buf)
-        paragraphs = clean.split("\n")
-
-        first_changed = len(paragraphs)
-        for i, para in enumerate(paragraphs):
-            stripped = para.strip() if para.strip() else ""
-            if i >= len(self._cached_paragraphs) or self._cached_paragraphs[i] != stripped:
-                first_changed = i
-                break
-
-        new_cached_paras: list[str] = []
-        new_cached_wrapped: list[list[str]] = []
-        all_lines: list[str] = []
-
-        for i, para in enumerate(paragraphs):
-            stripped = para.strip()
-            if i < first_changed:
-                new_cached_paras.append(self._cached_paragraphs[i])
-                new_cached_wrapped.append(self._cached_wrapped[i])
-                all_lines.extend(self._cached_wrapped[i])
-            else:
-                if not stripped:
-                    wrapped = [""]
-                else:
-                    wrapped = self._wrap_pixels(stripped, self._response_font, usable_w, self._emoji_response)
-                new_cached_paras.append(stripped)
-                new_cached_wrapped.append(wrapped)
-                all_lines.extend(wrapped)
-
-        self._cached_paragraphs = new_cached_paras
-        self._cached_wrapped = new_cached_wrapped
-
-        line_h = RESPONSE_FONT_SIZE + line_spacing
-        max_visible = (content_bottom - content_top) // line_h
-        truncated = len(all_lines) > max_visible
-
-        if truncated:
-            all_lines = all_lines[-max_visible:]
-
         text_color = (230, 235, 240)
-        y = content_top
-        for line in all_lines:
+        y = content_top - int(offset_px)
+        for line in lines:
+            if y >= content_bottom:
+                break
             if not line:
-                y += line_h // 2
+                y += line_h
                 continue
-            self._draw_mixed(
-                draw, (self._pad_x, y), line,
-                self._response_font, self._emoji_response, text_color,
-                max_x=self._width - self._pad_x,
-            )
+            if y + line_h > content_top:
+                self._draw_mixed(
+                    draw,
+                    (self._pad_x, y),
+                    line,
+                    self._response_font,
+                    self._emoji_response,
+                    text_color,
+                    max_x=self._width - self._pad_x,
+                )
             y += line_h
-
-        if truncated:
-            indicator = "\u2191"
-            iw = self._battery_font.getlength(indicator)
-            draw.text(
-                (self._width - iw - self._pad_x, content_top),
-                indicator, font=self._battery_font, fill=(80, 80, 80),
-            )
 
         self._draw_battery(draw)
         self._draw(img)
+
+    def _response_scroll_loop(self, lines: list[str], line_h: int, scroll_px: float) -> None:
+        stop_event = self._response_scroll_stop
+        started = time.monotonic()
+        while not stop_event.wait(timeout=0.05):
+            elapsed = time.monotonic() - started
+            if elapsed <= RESPONSE_SCROLL_TOP_HOLD:
+                offset = 0.0
+            else:
+                scroll_elapsed = elapsed - RESPONSE_SCROLL_TOP_HOLD
+                offset = min(scroll_px, scroll_elapsed * RESPONSE_SCROLL_SPEED)
+            self._render_response_frame(lines, line_h=line_h, offset_px=offset)
+            if offset >= scroll_px:
+                stop_event.wait(timeout=RESPONSE_SCROLL_END_HOLD)
+                break
+        self._render_response_frame(lines, line_h=line_h, offset_px=scroll_px)
+
+    def _stop_response_scroll(self) -> None:
+        thread = self._response_scroll_thread
+        if not thread:
+            return
+        self._response_scroll_stop.set()
+        if thread is not threading.current_thread():
+            thread.join(timeout=2)
+        self._response_scroll_thread = None
+
+    @property
+    def response_presentation_duration(self) -> float:
+        return self._response_presentation_duration
 
     def flush_response(self):
         """Force a final redraw of buffered response text."""
