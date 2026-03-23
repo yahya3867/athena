@@ -8,6 +8,7 @@ from datetime import datetime
 POWER_SUPPLY_SYS = "/sys/class/power_supply"
 PISUGAR_SOCKET = "/tmp/pisugar-server.sock"
 _TRAILING_PUNCT = re.compile(r"[.?!\s]+$")
+_TIME_LOCATION_QUALIFIER = re.compile(r"\b(?:in|for|at)\s+[a-z0-9]", re.IGNORECASE)
 
 
 def maybe_answer_local_status(user_text: str) -> str | None:
@@ -60,7 +61,7 @@ def maybe_answer_local_status(user_text: str) -> str | None:
 
 
 def _is_time_question(lower: str) -> bool:
-    return any(
+    asks_for_time = any(
         phrase in lower
         for phrase in (
             "what time is it",
@@ -70,6 +71,21 @@ def _is_time_question(lower: str) -> bool:
             "tell me the time",
         )
     )
+    if not asks_for_time:
+        return False
+    if _TIME_LOCATION_QUALIFIER.search(lower):
+        return False
+    if any(
+        phrase in lower
+        for phrase in (
+            "time zone",
+            "timezone",
+            "there",
+            "over there",
+        )
+    ):
+        return False
+    return True
 
 
 def _is_wifi_question(lower: str) -> bool:
