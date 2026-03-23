@@ -9,6 +9,10 @@ POWER_SUPPLY_SYS = "/sys/class/power_supply"
 PISUGAR_SOCKET = "/tmp/pisugar-server.sock"
 _TRAILING_PUNCT = re.compile(r"[.?!\s]+$")
 _TIME_LOCATION_QUALIFIER = re.compile(r"\b(?:in|for|at)\s+[a-z0-9]", re.IGNORECASE)
+_VISUAL_REQUEST_RE = re.compile(
+    r"\b(?:picture|photo|image|map|diagram|chart|visual|poster|banner|flyer|sign|graphic|card)\b",
+    re.IGNORECASE,
+)
 
 
 def maybe_answer_local_status(user_text: str) -> str | None:
@@ -17,9 +21,33 @@ def maybe_answer_local_status(user_text: str) -> str | None:
         return None
     lower = text.lower()
 
+    if _looks_like_visual_request(lower):
+        return None
+
     if _is_time_question(lower):
         now = datetime.now()
         return f"It's {now.strftime('%-I:%M %p')}."
+
+    if _is_device_identity_question(lower):
+        model = _read_device_model()
+        if "are you on the pi" in lower or "are you on a raspberry pi" in lower:
+            if model:
+                return f"Yes, I'm running on {model}."
+            return "Yes, I'm running on a Raspberry Pi."
+        if model:
+            return f"I'm running on {model}."
+        return "I'm running on a Raspberry Pi."
+
+    if _is_online_question(lower):
+        online = _internet_available()
+        connected, ssid = _read_wifi_status()
+        if online:
+            if connected and ssid:
+                return f"Yes, I'm online and connected to Wi-Fi on {ssid}."
+            return "Yes, I'm online right now."
+        if connected and ssid:
+            return f"I'm connected to Wi-Fi on {ssid}, but I don't appear to be online."
+        return "I'm not online right now."
 
     if _is_wifi_question(lower):
         connected, ssid = _read_wifi_status()
@@ -101,25 +129,96 @@ def _is_time_question(lower: str) -> bool:
     return True
 
 
+def _looks_like_visual_request(lower: str) -> bool:
+    if "help me visualize" in lower:
+        return True
+    if not _VISUAL_REQUEST_RE.search(lower):
+        return False
+    return any(
+        phrase in lower
+        for phrase in (
+            "show me",
+            "give me",
+            "display",
+            "pull up",
+            "generate",
+            "create",
+            "make",
+            "draw",
+            "paint",
+        )
+    )
+
+
+def _is_device_identity_question(lower: str) -> bool:
+    return any(
+        phrase in lower
+        for phrase in (
+            "what device are you running on",
+            "what are you running on",
+            "are you on the pi",
+            "are you on a raspberry pi",
+            "are you running on the pi",
+            "what hardware are you on",
+        )
+    )
+
+
+def _is_online_question(lower: str) -> bool:
+    return any(
+        phrase in lower
+        for phrase in (
+            "are you online",
+            "are you on the internet",
+            "are you connected to the internet",
+            "do you have internet",
+        )
+    )
+
+
 def _is_wifi_question(lower: str) -> bool:
-    return (
-        "wifi" in lower
-        or "wi-fi" in lower
-        or "ssid" in lower
-        or "hotspot" in lower
-        or ("internet" in lower and "connected" in lower)
+    return any(
+        phrase in lower
+        for phrase in (
+            "are you connected to wi-fi",
+            "are you connected to wifi",
+            "are you connected to the hotspot",
+            "what wi-fi are you on",
+            "what wifi are you on",
+            "what network are you on",
+            "what network are you connected to",
+            "what hotspot are you on",
+            "what hotspot are you connected to",
+            "what ssid are you on",
+            "what are you connected to",
+        )
     )
 
 
 def _is_battery_question(lower: str) -> bool:
+    if any(
+        phrase in lower
+        for phrase in (
+            "battery percentage",
+            "battery level",
+            "current battery",
+            "how much battery do you have",
+            "how much charge do you have",
+            "how much battery",
+            "are you low on battery",
+            "are you low",
+            "low battery",
+            "are you charging",
+            "charger",
+            "plugged in",
+            "plug you in",
+            "charge you",
+            "power cable",
+        )
+    ):
+        return True
     return (
-        "battery" in lower
-        or "charging" in lower
-        or "charger" in lower
-        or "plugged in" in lower
-        or "plug you in" in lower
-        or "charge you" in lower
-        or "power cable" in lower
+        "battery" in lower and any(token in lower for token in ("your", "you", "current", "percentage", "level"))
     )
 
 
@@ -147,8 +246,28 @@ def _is_should_plug_in_question(lower: str) -> bool:
             "should i charge you",
             "do you need charging",
             "do you need to be plugged in",
+            "do you need to be charged",
         )
     )
+
+
+def _read_device_model() -> str | None:
+    try:
+        with open("/proc/device-tree/model", "rb") as f:
+            raw = f.read().replace(b"\x00", b"").decode("utf-8", errors="ignore").strip()
+    except OSError:
+        return None
+    return raw or None
+
+
+def _internet_available() -> bool:
+    for host in (("1.1.1.1", 53), ("8.8.8.8", 53)):
+        try:
+            with socket.create_connection(host, timeout=1):
+                return True
+        except OSError:
+            continue
+    return False
 
 
 def _read_wifi_status() -> tuple[bool, str | None]:

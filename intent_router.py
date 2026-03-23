@@ -4,7 +4,7 @@ import re
 import requests
 
 import config
-from image_intent import extract_image_prompt
+from image_intent import clean_request_text, extract_image_prompt
 
 
 _ROUTER_PROMPT = (
@@ -39,14 +39,32 @@ _PROMPTS_NEEDING_CONTEXT = {
     "that",
     "these",
     "those",
+    "there",
+    "that city",
+    "that place",
+    "that one",
+    "this one",
+    "that map",
+    "that diagram",
+    "that picture",
+    "that image",
+    "that poster",
+    "that banner",
+    "that flyer",
+    "that sign",
+    "that graphic",
+    "that card",
+    "one of that",
+    "one of it",
+    "one of them",
 }
 _DISPLAYED_IMAGE_RE = re.compile(r"^displayed an image of (?P<subject>.+?)[.?!]*$", re.IGNORECASE)
 _QUESTION_SUBJECT_RE = re.compile(
-    r"^(?:who is|who's|what is|what's|tell me about)\s+(?P<subject>.+?)(?:\?|$)",
+    r"^(?:who is|who's|who was|what is|what's|what was|where is|where's|tell me about|explain)\s+(?P<subject>.+?)(?:\?|$)",
     re.IGNORECASE,
 )
 _VISUAL_SUBJECT_RE = re.compile(
-    r"^(?:show me|give me|can i have|generate|create|make|draw|paint)\b.*?\bof\s+(?P<subject>.+?)(?:\?|$)",
+    r"^(?:show me|give me|can i have|generate|create|make|draw|paint|display|pull up)\b.*?\bof\s+(?P<subject>.+?)(?:\?|$)",
     re.IGNORECASE,
 )
 _ASSISTANT_NAME_RE = re.compile(
@@ -60,13 +78,45 @@ _TRAILING_CONTEXT_RE = re.compile(
     re.IGNORECASE,
 )
 _TRAILING_PUNCT_RE = re.compile(r"[\s,.;:!?]+$")
+_CONTEXTUAL_PROMPT_RE = re.compile(
+    r"^(?P<context>one of that|one of it|one of them|that city|that place|that one|this one|that map|that diagram|that picture|that image|that poster|that banner|that flyer|that sign|that graphic|that card|him|her|them|these|those|there|this|that|it)(?:\s+(?P<rest>.+))?$",
+    re.IGNORECASE,
+)
+_FOLLOWUP_REPEAT_RE = re.compile(
+    r"^(?:now\s+)?(?:show|display|pull up|give|make|create|generate|draw|paint)(?:\s+me)?\s+(?P<context>that|that one|this|this one|it|one of that|one of it|one of them)\s*$",
+    re.IGNORECASE,
+)
+_FOLLOWUP_STYLE_RE = re.compile(
+    r"^(?:now\s+)?(?:make|show|display|pull up|give|create|generate|draw|paint)(?:\s+me)?\s+(?P<context>it|that|that one|this|this one|one of that|one of it|one of them)\s+(?P<modifier>.+)$",
+    re.IGNORECASE,
+)
+_FOLLOWUP_TEXT_RE = re.compile(
+    r"^(?:write|put)\s+(?P<modifier>.+?)\s+(?:on it|on that|on this|in the image|in that image)\s*$",
+    re.IGNORECASE,
+)
+_FOLLOWUP_VISUAL_REF_RE = re.compile(
+    r"^(?:show|display|pull up|give|make|create|generate)(?:\s+me)?\s+(?:a|an)?\s*(?:picture|image|photo|map|diagram|chart|visual|poster|banner|flyer|sign|graphic|card)\s+of\s+(?P<context>that city|that place|that map|that diagram|that picture|that image|that poster|that banner|that flyer|that sign|that graphic|that card|him|her|them|it|that|this|there)(?:\s+(?P<modifier>.+))?$",
+    re.IGNORECASE,
+)
+_IMAGE_STYLE_WORDS = (
+    "simple",
+    "simpler",
+    "cartoonish",
+    "cartoony",
+    "dramatic",
+    "warmer",
+    "clearer",
+    "cleaner",
+    "darker",
+    "brighter",
+)
 
 
 def route_user_request(
     user_text: str,
     history: list[dict[str, str]] | None = None,
 ) -> dict[str, str | None]:
-    fallback_prompt = _resolve_prompt_with_history(extract_image_prompt(user_text), history)
+    fallback_prompt = _fallback_image_prompt(user_text, history)
     fallback = {
         "mode": "image" if fallback_prompt else "chat",
         "image_prompt": fallback_prompt,
@@ -159,6 +209,16 @@ def _build_router_input(
     return inputs
 
 
+def _fallback_image_prompt(
+    user_text: str,
+    history: list[dict[str, str]] | None,
+) -> str | None:
+    explicit_prompt = _resolve_prompt_with_history(extract_image_prompt(user_text), history)
+    if explicit_prompt:
+        return explicit_prompt
+    return _extract_visual_followup_prompt(user_text, history)
+
+
 def _resolve_prompt_with_history(
     prompt: str | None,
     history: list[dict[str, str]] | None,
@@ -166,15 +226,14 @@ def _resolve_prompt_with_history(
     if not prompt:
         return prompt
     prompt = prompt.strip()
-    if not history or not _prompt_needs_context(prompt):
+    if not history:
         return prompt
-    for message in reversed(history[-6:]):
-        content = str(message.get("content", "")).strip()
-        if not content:
-            continue
-        subject = _extract_subject_from_message(content)
-        if subject and not _prompt_needs_context(subject):
-            return subject
+    subject = _recent_subject(history)
+    if not subject:
+        return prompt
+    replaced = _replace_contextual_prompt(prompt, subject)
+    if replaced:
+        return replaced
     return prompt
 
 
@@ -182,7 +241,93 @@ def _prompt_needs_context(prompt: str) -> bool:
     cleaned = re.sub(r"[^a-zA-Z\s]", " ", prompt).strip().lower()
     if not cleaned:
         return False
-    return cleaned in _PROMPTS_NEEDING_CONTEXT
+    return cleaned in _PROMPTS_NEEDING_CONTEXT or bool(_CONTEXTUAL_PROMPT_RE.match(cleaned))
+
+
+def _replace_contextual_prompt(prompt: str, subject: str) -> str | None:
+    match = _CONTEXTUAL_PROMPT_RE.match(prompt.strip())
+    if not match:
+        return None
+    rest = (match.group("rest") or "").strip()
+    if rest:
+        return _normalize_subject(f"{subject} {rest}")
+    return _normalize_subject(subject)
+
+
+def _recent_subject(history: list[dict[str, str]]) -> str | None:
+    for message in reversed(history[-6:]):
+        content = str(message.get("content", "")).strip()
+        if not content:
+            continue
+        subject = _extract_subject_from_message(content)
+        if subject and not _prompt_needs_context(subject):
+            return subject
+    return None
+
+
+def _recent_visual_subject(history: list[dict[str, str]] | None) -> str | None:
+    if not history:
+        return None
+    for message in reversed(history[-6:]):
+        if str(message.get("role", "")).strip() != "assistant":
+            continue
+        content = str(message.get("content", "")).strip()
+        if not content:
+            continue
+        match = _DISPLAYED_IMAGE_RE.match(content)
+        if match:
+            return _normalize_subject(match.group("subject"))
+    return None
+
+
+def _extract_visual_followup_prompt(
+    user_text: str,
+    history: list[dict[str, str]] | None,
+) -> str | None:
+    if not history:
+        return None
+    candidate = _TRAILING_PUNCT_RE.sub("", clean_request_text(user_text)).strip()
+    recent_visual = _recent_visual_subject(history)
+    recent_subject = _recent_subject(history)
+
+    match = _FOLLOWUP_VISUAL_REF_RE.match(candidate)
+    if match:
+        subject = recent_subject or recent_visual
+        if not subject:
+            return None
+        return _compose_visual_followup_prompt(subject, match.group("modifier"))
+
+    if not recent_visual:
+        return None
+
+    match = _FOLLOWUP_REPEAT_RE.match(candidate)
+    if match:
+        return recent_visual
+
+    match = _FOLLOWUP_STYLE_RE.match(candidate)
+    if match:
+        return _compose_visual_followup_prompt(recent_visual, match.group("modifier"))
+
+    match = _FOLLOWUP_TEXT_RE.match(candidate)
+    if match:
+        return _compose_visual_followup_prompt(recent_visual, f"with the words {match.group('modifier')}")
+
+    return None
+
+
+def _compose_visual_followup_prompt(subject: str, modifier: str | None) -> str | None:
+    subject = _normalize_subject(subject)
+    if not subject:
+        return None
+    modifier = _normalize_subject(modifier or "")
+    if not modifier:
+        return subject
+    lower_modifier = modifier.lower()
+    if lower_modifier.startswith(("with the words ", "that says ", "write ")):
+        return f"{subject}, {modifier}"
+    if any(lower_modifier.startswith(word) for word in _IMAGE_STYLE_WORDS):
+        return f"{subject}, {modifier}"
+    return f"{subject}, {modifier}"
 
 
 def _extract_subject_from_message(content: str) -> str | None:

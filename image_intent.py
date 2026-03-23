@@ -12,6 +12,7 @@ _LEADIN_PREFIX = re.compile(
     r"^\s*(?:i was wondering if you can\s+|i was wondering if you could\s+|i was wondering whether you can\s+|i was wondering whether you could\s+|i want you to\s+|i need you to\s+|i would like you to\s+)",
     re.IGNORECASE,
 )
+_VISUAL_NOUNS = "picture|image|photo|drawing|illustration|map|diagram|chart|visual|poster|banner|flyer|sign|graphic|card"
 _IMAGE_PATTERNS = [
     re.compile(
         r"^show me (?:a|an)?\s*(?:picture|image|photo|drawing|illustration) of (?P<prompt>.+)$",
@@ -23,6 +24,18 @@ _IMAGE_PATTERNS = [
     ),
     re.compile(
         r"^give me (?:a|an)?\s*(?:picture|image|photo|drawing|illustration|map|diagram|chart|visual) of (?P<prompt>.+)$",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        rf"^(?:display|pull up) (?:me\s+)?(?:a|an)?\s*(?:{_VISUAL_NOUNS}) of (?P<prompt>.+)$",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        rf"^(?:show|give|make|create|generate|display|pull up) (?:me\s+)?(?:a|an)?\s*(?P<kind>poster|banner|flyer|sign|graphic|card)(?:\s+that\s+says|\s+that\s+reads|\s+with(?:\s+the)?\s+words|\s+with\s+text)\s+(?P<prompt>.+)$",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        rf"^(?:show|give|make|create|generate|display|pull up) (?:me\s+)?(?:a|an)?\s*(?P<kind>picture|image|photo|graphic|card)(?:\s+that\s+says|\s+that\s+reads|\s+with(?:\s+the)?\s+words|\s+with\s+text)\s+(?P<prompt>.+)$",
         re.IGNORECASE,
     ),
     re.compile(
@@ -57,21 +70,37 @@ _IMAGE_PATTERNS = [
         r"^show me where (?P<prompt>.+)$",
         re.IGNORECASE,
     ),
+    re.compile(
+        r"^help me visualize (?P<prompt>.+)$",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        r"^(?:make|create|generate) (?:me\s+)?(?:a|an)?\s*simple diagram of (?P<prompt>.+)$",
+        re.IGNORECASE,
+    ),
 ]
 
 
-def extract_image_prompt(text: str) -> str | None:
+def clean_request_text(text: str) -> str:
     candidate = (text or "").strip()
-    if not candidate:
-        return None
     candidate = _ATHENA_PREFIX.sub("", candidate).strip()
     candidate = _LEADIN_PREFIX.sub("", candidate).strip()
     candidate = _POLITE_PREFIX.sub("", candidate).strip()
+    return candidate
+
+
+def extract_image_prompt(text: str) -> str | None:
+    candidate = clean_request_text(text)
+    if not candidate:
+        return None
     for pattern in _IMAGE_PATTERNS:
         match = pattern.match(candidate)
         if not match:
             continue
         prompt = match.group("prompt").strip()
+        kind = match.groupdict().get("kind")
+        if kind:
+            prompt = f"{kind.strip()} with the words {prompt}"
         prompt = _normalize_prompt(prompt)
         if prompt:
             return prompt
@@ -91,6 +120,9 @@ def _extract_image_prompt_from_sentences(candidate: str) -> str | None:
             if not match:
                 continue
             prompt = match.group("prompt").strip()
+            kind = match.groupdict().get("kind")
+            if kind:
+                prompt = f"{kind.strip()} with the words {prompt}"
             tail = " ".join(parts[idx + 1 :]).strip()
             if tail:
                 prompt = f"{prompt}. {tail}"

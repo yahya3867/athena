@@ -8,6 +8,8 @@ from audio_capture import Recorder, check_audio_level, create_silence_fixture
 from chat_client import stream_response
 from image_client import generate_image
 from intent_router import route_user_request
+from local_status import maybe_answer_local_status
+from prompt_regressions import run_prompt_regressions
 from stt_client import transcribe
 from tts_client import TTSPlayer
 
@@ -158,9 +160,26 @@ def cmd_demo(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_prompt_check(args: argparse.Namespace) -> int:
+    failures, total = run_prompt_regressions(verbose=not args.quiet)
+    print(f"[prompt-check] {total - failures}/{total} passed")
+    return 0 if failures == 0 else 1
+
+
 def _run_user_turn(transcript: str, history: list[dict], player: TTSPlayer | None) -> None:
     print(f"[user] {transcript}")
-    route = route_user_request(transcript)
+    local_response = maybe_answer_local_status(transcript)
+    if local_response:
+        print(f"[assistant] {local_response}")
+        if player:
+            player.submit(_postprocess_response(local_response))
+            player.flush()
+        history.append({"role": "user", "content": transcript})
+        history.append({"role": "assistant", "content": local_response})
+        history[:] = _trim_history(history)
+        return
+
+    route = route_user_request(transcript, history=history)
     image_prompt = route.get("image_prompt") if route.get("mode") == "image" else None
     if image_prompt:
         try:
@@ -267,6 +286,10 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("demo", help="Run the full speech -> answer -> speech loop")
     p.add_argument("--no-tts", action="store_true", help="Disable speech playback for this run")
     p.set_defaults(func=cmd_demo)
+
+    p = sub.add_parser("prompt-check", help="Run deterministic prompt routing regressions")
+    p.add_argument("--quiet", action="store_true", help="Only print the final summary")
+    p.set_defaults(func=cmd_prompt_check)
 
     return parser
 
