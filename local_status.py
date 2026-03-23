@@ -34,6 +34,19 @@ def maybe_answer_local_status(user_text: str) -> str | None:
         if pct is None and status is None:
             return "I can't read my battery right now."
 
+        if _is_should_plug_in_question(lower):
+            if status == "Charging":
+                if pct is not None:
+                    return f"I'm already plugged in and charging. My battery is {pct} percent."
+                return "I'm already plugged in and charging."
+            if pct is None:
+                return "I can't tell right now whether I need charging."
+            if pct <= 20:
+                return f"Yes, please plug me in soon. My battery is {pct} percent."
+            if pct <= 50:
+                return f"Not urgently, but charging me soon would help. My battery is {pct} percent."
+            return f"Not right now. My battery is {pct} percent."
+
         if _is_charging_question(lower):
             if status == "Charging":
                 if pct is not None:
@@ -99,7 +112,15 @@ def _is_wifi_question(lower: str) -> bool:
 
 
 def _is_battery_question(lower: str) -> bool:
-    return "battery" in lower or "charging" in lower or "charger" in lower
+    return (
+        "battery" in lower
+        or "charging" in lower
+        or "charger" in lower
+        or "plugged in" in lower
+        or "plug you in" in lower
+        or "charge you" in lower
+        or "power cable" in lower
+    )
 
 
 def _is_charging_question(lower: str) -> bool:
@@ -112,6 +133,20 @@ def _is_charging_question(lower: str) -> bool:
             "on the charger",
             "charging right now",
             "currently charging",
+        )
+    )
+
+
+def _is_should_plug_in_question(lower: str) -> bool:
+    return any(
+        phrase in lower
+        for phrase in (
+            "do i plug you in",
+            "should i plug you in",
+            "do i need to plug you in",
+            "should i charge you",
+            "do you need charging",
+            "do you need to be plugged in",
         )
     )
 
