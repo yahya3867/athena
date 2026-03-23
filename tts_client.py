@@ -34,23 +34,22 @@ class TTSPlayer:
     def current_text(self) -> str:
         return self._current_text
 
-    def get_visible_text(self, *, max_words: int = 9) -> str:
+    def get_visible_text(self, *, max_chars: int = 56) -> str:
         text = self._current_text.strip()
         if not text:
             return ""
+        count = self._visible_char_count(len(text))
+        visible = text[:count].strip()
+        if not visible:
+            return text[:1]
+        if len(visible) <= max_chars:
+            return visible
 
-        words = text.split()
-        if not words:
-            return text
-
-        if len(words) == 1:
-            count = self._visible_char_count(len(text))
-            return text[:count]
-
-        visible_words = words[: self._visible_word_count(len(words))]
-        if len(visible_words) > max_words:
-            visible_words = visible_words[-max_words:]
-        return " ".join(visible_words)
+        tail = visible[-max_chars:].lstrip()
+        split_at = tail.find(" ")
+        if split_at > 0:
+            tail = tail[split_at + 1 :].lstrip()
+        return tail or visible[-max_chars:]
 
     def get_mouth_shape(self) -> int:
         if self._play_proc is None or self._play_proc.poll() is not None:
@@ -64,29 +63,17 @@ class TTSPlayer:
             return 1
         return -1
 
-    def _visible_word_count(self, total_words: int) -> int:
-        if total_words <= 0:
-            return 0
-        if self._playback_start <= 0:
-            return min(2, total_words)
-
-        elapsed = max(0.0, time.monotonic() - self._playback_start)
-        if self._playback_duration > 0.05:
-            progress = min(1.0, elapsed / self._playback_duration)
-            return min(total_words, max(1, int(progress * total_words + 0.999)))
-        return min(total_words, max(1, 1 + int(elapsed * 2.8)))
-
     def _visible_char_count(self, total_chars: int) -> int:
         if total_chars <= 0:
             return 0
         if self._playback_start <= 0:
-            return 1
+            return min(total_chars, 6)
 
         elapsed = max(0.0, time.monotonic() - self._playback_start)
         if self._playback_duration > 0.05:
             progress = min(1.0, elapsed / self._playback_duration)
             return min(total_chars, max(1, int(progress * total_chars + 0.999)))
-        return min(total_chars, max(1, 1 + int(elapsed * 8)))
+        return min(total_chars, max(1, 6 + int(elapsed * 14)))
 
     def submit(self, text: str) -> None:
         text = (text or "").strip()

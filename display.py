@@ -1022,7 +1022,7 @@ class Display:
             # Subtitle: single line showing the current fragment being spoken
             sub_text = ""
             if tts:
-                sub_text = tts.get_visible_text(max_words=8)
+                sub_text = tts.get_visible_text(max_chars=64)
             if sub_text:
                 sub_text = _clean_markdown(sub_text)
                 self._draw_text_panel(
@@ -1030,7 +1030,7 @@ class Display:
                     sub_text,
                     font=self._response_font,
                     emoji_font=self._emoji_response,
-                    box=(16, self._height - FOOTER_HEIGHT - 42, self._width - 16, self._height - FOOTER_HEIGHT - 6),
+                    box=(16, self._height - FOOTER_HEIGHT - 60, self._width - 16, self._height - FOOTER_HEIGHT - 6),
                     text_fill=IDLE_PRIMARY_TEXT,
                     align="left",
                     vertical_align="top",
