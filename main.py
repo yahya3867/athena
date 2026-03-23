@@ -23,6 +23,7 @@ from stt_client import transcribe
 from chat_client import stream_response
 from image_client import generate_image
 from intent_router import route_user_request
+from local_status import maybe_answer_local_status
 from button_ptt import ButtonPTT, State
 from tts_client import TTSPlayer
 
@@ -189,6 +190,13 @@ class Assistant:
             self.recorder.discard()
             return
 
+        local_response = maybe_answer_local_status(transcript)
+        if local_response:
+            log.info("local status route => %r", local_response[:120])
+            self._present_text_response(transcript, local_response, my_gen)
+            self.recorder.discard()
+            return
+
         route = route_user_request(transcript, history=self._conversation_history)
         route_prompt = route.get("image_prompt")
         route_preview = None
@@ -269,23 +277,37 @@ class Assistant:
             return
 
         log.info("stream done in %.1fs, %d chars", time.monotonic() - stream_t0, len(full_response))
+        self._present_text_response(transcript, full_response, my_gen, tts_buffer=tts_buffer)
+        self.recorder.discard()
 
-        # Submit remaining TTS buffer and wait for playback to finish
+    def _present_text_response(
+        self,
+        transcript: str,
+        full_response: str,
+        my_gen: int,
+        tts_buffer: str = "",
+    ) -> None:
+        was_streaming = self.ptt.state == State.STREAMING
+        self.ptt.state = State.STREAMING
         if self._tts:
+            if not was_streaming:
+                self.display.set_character_state("talking")
             if tts_buffer.strip():
                 self._tts.submit(tts_buffer.strip())
+            elif full_response.strip():
+                self._tts.submit(full_response.strip())
             self._tts.flush()
             if self._is_stale(my_gen):
-                self.recorder.discard()
                 return
             self.display.stop_character()
             self.display.set_response_text(full_response)
         else:
+            self.display.stop_spinner()
+            self.display.set_response_text(full_response)
             self.display.flush_response()
 
         log.info("response complete -- holding on screen")
 
-        # Update conversation history
         self._conversation_history.append({"role": "user", "content": transcript})
         self._conversation_history.append({"role": "assistant", "content": full_response})
         max_msgs = config.CONVERSATION_HISTORY_LENGTH * 2
@@ -295,9 +317,7 @@ class Assistant:
         self._dismiss.clear()
         self._dismiss.wait(timeout=self._response_hold_timeout)
 
-        # Could have been cancelled during the hold
         if self._is_stale(my_gen):
-            self.recorder.discard()
             return
 
         if self._dismiss.is_set():
@@ -306,7 +326,6 @@ class Assistant:
             log.info("display timeout, returning to idle")
 
         self._go_idle()
-        self.recorder.discard()
 
     def _go_idle(self):
         self._last_activity = time.monotonic()
