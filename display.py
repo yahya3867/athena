@@ -820,18 +820,28 @@ class Display:
         text_fill: tuple[int, int, int],
         panel_fill: tuple[int, int, int] = SCENE_PANEL_FILL,
         outline: tuple[int, int, int] = SCENE_PANEL_STROKE,
+        align: str = "center",
+        vertical_align: str = "center",
+        prefer_tail: bool = False,
     ) -> None:
         left, top, right, bottom = box
         draw.rounded_rectangle(box, radius=14, fill=panel_fill, outline=outline, width=2)
         inner_w = right - left - 20
         line_h = int(font.size) + 4
         max_lines = max(1, (bottom - top - 18) // line_h)
-        lines = self._wrap_pixels(text, font, inner_w, emoji_font)[:max_lines]
+        wrapped_lines = self._wrap_pixels(text, font, inner_w, emoji_font)
+        lines = wrapped_lines[-max_lines:] if prefer_tail else wrapped_lines[:max_lines]
         total_h = len(lines) * line_h
-        y = top + max(8, int(((bottom - top) - total_h) / 2))
+        if vertical_align == "top":
+            y = top + 8
+        else:
+            y = top + max(8, int(((bottom - top) - total_h) / 2))
         for line in lines:
             tw = self._text_width_mixed(line, font, emoji_font) if emoji_font else font.getlength(line)
-            x = max(left + 10, int(left + ((right - left) - tw) / 2))
+            if align == "left":
+                x = left + 10
+            else:
+                x = max(left + 10, int(left + ((right - left) - tw) / 2))
             self._draw_mixed(
                 draw,
                 (x, y),
@@ -1012,7 +1022,7 @@ class Display:
             # Subtitle: single line showing the current fragment being spoken
             sub_text = ""
             if tts:
-                sub_text = tts.current_text
+                sub_text = tts.get_visible_text(max_words=8)
             if sub_text:
                 sub_text = _clean_markdown(sub_text)
                 self._draw_text_panel(
@@ -1022,6 +1032,9 @@ class Display:
                     emoji_font=self._emoji_response,
                     box=(16, self._height - FOOTER_HEIGHT - 42, self._width - 16, self._height - FOOTER_HEIGHT - 6),
                     text_fill=IDLE_PRIMARY_TEXT,
+                    align="left",
+                    vertical_align="top",
+                    prefer_tail=True,
                 )
 
             if not self._transient_generation_active(generation):

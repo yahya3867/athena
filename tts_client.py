@@ -34,6 +34,24 @@ class TTSPlayer:
     def current_text(self) -> str:
         return self._current_text
 
+    def get_visible_text(self, *, max_words: int = 9) -> str:
+        text = self._current_text.strip()
+        if not text:
+            return ""
+
+        words = text.split()
+        if not words:
+            return text
+
+        if len(words) == 1:
+            count = self._visible_char_count(len(text))
+            return text[:count]
+
+        visible_words = words[: self._visible_word_count(len(words))]
+        if len(visible_words) > max_words:
+            visible_words = visible_words[-max_words:]
+        return " ".join(visible_words)
+
     def get_mouth_shape(self) -> int:
         if self._play_proc is None or self._play_proc.poll() is not None:
             return -1
@@ -45,6 +63,30 @@ class TTSPlayer:
         if elapsed < self._playback_duration:
             return 1
         return -1
+
+    def _visible_word_count(self, total_words: int) -> int:
+        if total_words <= 0:
+            return 0
+        if self._playback_start <= 0:
+            return min(2, total_words)
+
+        elapsed = max(0.0, time.monotonic() - self._playback_start)
+        if self._playback_duration > 0.05:
+            progress = min(1.0, elapsed / self._playback_duration)
+            return min(total_words, max(1, int(progress * total_words + 0.999)))
+        return min(total_words, max(1, 1 + int(elapsed * 2.8)))
+
+    def _visible_char_count(self, total_chars: int) -> int:
+        if total_chars <= 0:
+            return 0
+        if self._playback_start <= 0:
+            return 1
+
+        elapsed = max(0.0, time.monotonic() - self._playback_start)
+        if self._playback_duration > 0.05:
+            progress = min(1.0, elapsed / self._playback_duration)
+            return min(total_chars, max(1, int(progress * total_chars + 0.999)))
+        return min(total_chars, max(1, 1 + int(elapsed * 8)))
 
     def submit(self, text: str) -> None:
         text = (text or "").strip()
