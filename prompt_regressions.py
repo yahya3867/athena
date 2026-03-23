@@ -140,6 +140,19 @@ PROMPT_CASES: list[PromptCase] = [
         expected_prompt_any_of=("tenzin gyatso", "dalai lama"),
     ),
     PromptCase(
+        name="followup-person-name-beats-title",
+        history=[
+            {"role": "user", "content": "Who is the current president of Syria?"},
+            {
+                "role": "assistant",
+                "content": "The current president of Syria is Ahmad al-Sharaa. Bashar al-Assad was the previous president.",
+            },
+        ],
+        transcript="Show me a picture of him.",
+        expected_route="image",
+        expected_prompt_contains=("portrait photo", "ahmad al-sharaa"),
+    ),
+    PromptCase(
         name="followup-place-reference",
         history=[
             {"role": "user", "content": "Tell me about Delhi."},

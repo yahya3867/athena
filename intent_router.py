@@ -58,6 +58,11 @@ _PROMPTS_NEEDING_CONTEXT = {
     "one of it",
     "one of them",
 }
+_PERSON_CONTEXTS = {"he", "him", "his", "she", "her", "hers"}
+_NAME_TOKEN = r"[A-Z][A-Za-z'’.-]*"
+_NAME_CONNECTOR_WORDS = r"al|el|bin|bint|ibn|van|von|de|del|da|di|du|la|le|st\.?|saint"
+_NAME_CONNECTOR_TOKEN = rf"(?i:(?:{_NAME_CONNECTOR_WORDS}))(?:-{_NAME_TOKEN})?"
+_PERSON_NAME = rf"{_NAME_TOKEN}(?:\s+(?:{_NAME_CONNECTOR_TOKEN}|{_NAME_TOKEN})){{0,5}}"
 _DISPLAYED_IMAGE_RE = re.compile(r"^displayed an image of (?P<subject>.+?)[.?!]*$", re.IGNORECASE)
 _QUESTION_SUBJECT_RE = re.compile(
     r"^(?:who is|who's|who was|what is|what's|what was|where is|where's|tell me about|explain)\s+(?P<subject>.+?)(?:\?|$)",
@@ -68,11 +73,12 @@ _VISUAL_SUBJECT_RE = re.compile(
     re.IGNORECASE,
 )
 _ASSISTANT_NAME_RE = re.compile(
-    r"\b(?:is|was|are|were)\s+(?P<subject>[A-Z][A-Za-z'’.-]*(?:\s+[A-Z][A-Za-z'’.-]*){0,5})(?:[,.!?]|$)"
+    rf"\b(?:is|was|are|were)\s+(?P<subject>{_PERSON_NAME})(?:[,.!?]|$)"
 )
 _LEADING_NAME_RE = re.compile(
-    r"^(?P<subject>[A-Z][A-Za-z'’.-]*(?:\s+[A-Z][A-Za-z'’.-]*){0,5})(?:\s+(?:is|was|are|were)\b|[,.!?]|$)"
+    rf"^(?P<subject>{_PERSON_NAME})(?:\s+(?:is|was|are|were)\b|[,.!?]|$)"
 )
+_SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
 _TRAILING_CONTEXT_RE = re.compile(
     r"\b(?:please|right now|currently|today|now|for me|for us)\b",
     re.IGNORECASE,
@@ -228,7 +234,7 @@ def _resolve_prompt_with_history(
     prompt = prompt.strip()
     if not history:
         return prompt
-    subject = _recent_subject(history)
+    subject = _recent_context_subject(prompt, history)
     if not subject:
         return prompt
     replaced = _replace_contextual_prompt(prompt, subject)
@@ -248,10 +254,11 @@ def _replace_contextual_prompt(prompt: str, subject: str) -> str | None:
     match = _CONTEXTUAL_PROMPT_RE.match(prompt.strip())
     if not match:
         return None
-    rest = (match.group("rest") or "").strip()
-    if rest:
-        return _normalize_subject(f"{subject} {rest}")
-    return _normalize_subject(subject)
+    return _compose_visual_followup_prompt(
+        subject,
+        match.group("rest"),
+        prefer_portrait=_context_prefers_person(match.group("context")),
+    )
 
 
 def _recent_subject(history: list[dict[str, str]]) -> str | None:
@@ -263,6 +270,29 @@ def _recent_subject(history: list[dict[str, str]]) -> str | None:
         if subject and not _prompt_needs_context(subject):
             return subject
     return None
+
+
+def _recent_named_person_subject(history: list[dict[str, str]] | None) -> str | None:
+    if not history:
+        return None
+    for message in reversed(history[-6:]):
+        if str(message.get("role", "")).strip() != "assistant":
+            continue
+        content = str(message.get("content", "")).strip()
+        if not content:
+            continue
+        subject = _extract_named_person_from_message(content)
+        if subject and not _prompt_needs_context(subject):
+            return subject
+    return None
+
+
+def _recent_context_subject(prompt: str, history: list[dict[str, str]]) -> str | None:
+    if _prompt_prefers_person(prompt):
+        subject = _recent_named_person_subject(history)
+        if subject:
+            return subject
+    return _recent_subject(history)
 
 
 def _recent_visual_subject(history: list[dict[str, str]] | None) -> str | None:
@@ -292,10 +322,15 @@ def _extract_visual_followup_prompt(
 
     match = _FOLLOWUP_VISUAL_REF_RE.match(candidate)
     if match:
-        subject = recent_subject or recent_visual
+        prefer_portrait = _context_prefers_person(match.group("context"))
+        subject = (_recent_named_person_subject(history) if prefer_portrait else None) or recent_subject or recent_visual
         if not subject:
             return None
-        return _compose_visual_followup_prompt(subject, match.group("modifier"))
+        return _compose_visual_followup_prompt(
+            subject,
+            match.group("modifier"),
+            prefer_portrait=prefer_portrait,
+        )
 
     if not recent_visual:
         return None
@@ -315,10 +350,17 @@ def _extract_visual_followup_prompt(
     return None
 
 
-def _compose_visual_followup_prompt(subject: str, modifier: str | None) -> str | None:
+def _compose_visual_followup_prompt(
+    subject: str,
+    modifier: str | None,
+    *,
+    prefer_portrait: bool = False,
+) -> str | None:
     subject = _normalize_subject(subject)
     if not subject:
         return None
+    if prefer_portrait:
+        subject = f"portrait photo of {subject}"
     modifier = _normalize_subject(modifier or "")
     if not modifier:
         return subject
@@ -345,6 +387,33 @@ def _extract_subject_from_message(content: str) -> str | None:
             if subject:
                 return subject
     return None
+
+
+def _extract_named_person_from_message(content: str) -> str | None:
+    for sentence in _SENTENCE_SPLIT_RE.split(content.strip()):
+        sentence = sentence.strip()
+        if not sentence:
+            continue
+        for pattern in (_ASSISTANT_NAME_RE, _LEADING_NAME_RE):
+            match = pattern.search(sentence)
+            if match:
+                subject = _normalize_subject(match.group("subject"))
+                if subject:
+                    return subject
+    return None
+
+
+def _context_prefers_person(context: str | None) -> bool:
+    if not context:
+        return False
+    return context.strip().lower() in _PERSON_CONTEXTS
+
+
+def _prompt_prefers_person(prompt: str) -> bool:
+    match = _CONTEXTUAL_PROMPT_RE.match(prompt.strip())
+    if not match:
+        return False
+    return _context_prefers_person(match.group("context"))
 
 
 def _normalize_subject(subject: str) -> str | None:
