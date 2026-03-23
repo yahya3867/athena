@@ -29,6 +29,8 @@ from tts_client import TTSPlayer
 
 
 class Assistant:
+    _INTERRUPT_TAP_MAX_SECONDS = 0.35
+
     def __init__(self):
         config.print_config()
 
@@ -53,6 +55,7 @@ class Assistant:
         self._last_activity = time.monotonic()
         self._last_idle_refresh = 0.0
         self._state_entered_at = 0.0
+        self._listen_started_at = 0.0
         self._tts = TTSPlayer() if config.ENABLE_TTS else None
         self._conversation_history: list[dict] = []
 
@@ -101,6 +104,7 @@ class Assistant:
         self._dismiss.set()
         log.info("button pressed -- start recording")
         self.display.reset_transient_state()
+        self._listen_started_at = time.monotonic()
         if self._tts:
             self.display.start_character("listening", self._tts)
         else:
@@ -141,7 +145,23 @@ class Assistant:
 
     def _process_utterance_inner(self, my_gen: int):
         # --- Stop recording ---
-        wav_path = self.recorder.stop()
+        capture_duration = max(0.0, time.monotonic() - self._listen_started_at)
+        quiet_if_tiny = capture_duration <= self._INTERRUPT_TAP_MAX_SECONDS
+        recording = self.recorder.stop(quiet_if_tiny=quiet_if_tiny)
+        wav_path = recording.path
+
+        if not recording.valid:
+            if quiet_if_tiny:
+                log.info(
+                    "aborted short interrupt listen -- ignoring tiny capture (%d bytes, %.2fs)",
+                    recording.size_bytes,
+                    capture_duration,
+                )
+                self.recorder.discard()
+                if not self._is_stale(my_gen):
+                    self._go_idle()
+                return
+            raise RuntimeError(f"WAV file too small ({recording.size_bytes} bytes)")
 
         # --- Silence gate ---
         rms = check_audio_level(wav_path)

@@ -5,10 +5,21 @@ import struct
 import subprocess
 import time
 import wave
+from dataclasses import dataclass
 
 import config
 
 WAV_PATH = "/tmp/utterance.wav"
+MIN_VALID_WAV_BYTES = 100
+
+
+@dataclass(frozen=True)
+class RecordingResult:
+    path: str
+    exists: bool
+    size_bytes: int
+    valid: bool
+    stderr: str = ""
 
 
 def check_audio_level(wav_path: str) -> float:
@@ -88,11 +99,18 @@ class Recorder:
             _dump_audio_info()
             raise
 
-    def stop(self) -> str:
-        """Stop recording. Returns path to the WAV file."""
+    def stop(self, *, quiet_if_tiny: bool = False) -> RecordingResult:
+        """Stop recording and report whether the capture looks valid."""
         proc = self._proc
         if proc is None:
-            return WAV_PATH
+            exists = os.path.exists(WAV_PATH)
+            size_bytes = os.path.getsize(WAV_PATH) if exists else 0
+            return RecordingResult(
+                path=WAV_PATH,
+                exists=exists,
+                size_bytes=size_bytes,
+                valid=exists and size_bytes >= MIN_VALID_WAV_BYTES,
+            )
 
         # Send SIGINT for clean WAV header finalization
         try:
@@ -115,13 +133,23 @@ class Recorder:
 
         self._proc = None
 
-        if not os.path.exists(WAV_PATH) or os.path.getsize(WAV_PATH) < 100:
+        exists = os.path.exists(WAV_PATH)
+        size_bytes = os.path.getsize(WAV_PATH) if exists else 0
+        valid = exists and size_bytes >= MIN_VALID_WAV_BYTES
+
+        if not valid and not quiet_if_tiny:
             print(f"[rec] WARNING: WAV file missing or too small")
             if stderr:
                 print(f"[rec] stderr: {stderr}")
             _dump_audio_info()
 
-        return WAV_PATH
+        return RecordingResult(
+            path=WAV_PATH,
+            exists=exists,
+            size_bytes=size_bytes,
+            valid=valid,
+            stderr=stderr,
+        )
 
     def cancel(self) -> None:
         """Kill recording without caring about output."""

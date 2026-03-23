@@ -23,6 +23,8 @@ class TTSPlayer:
         self._queue: queue.Queue[str | object] = queue.Queue()
         self._done = threading.Event()
         self._cancel = threading.Event()
+        self._cancel_generation = 0
+        self._cancel_lock = threading.Lock()
         self._current_text = ""
         self._play_proc: subprocess.Popen | None = None
         self._playback_start: float = 0.0
@@ -96,6 +98,8 @@ class TTSPlayer:
 
     def cancel(self) -> None:
         self._cancel.set()
+        with self._cancel_lock:
+            self._cancel_generation += 1
         if self._play_proc and self._play_proc.poll() is None:
             try:
                 self._play_proc.terminate()
@@ -132,9 +136,16 @@ class TTSPlayer:
             text = str(item).strip()
             if not text:
                 continue
+            with self._cancel_lock:
+                generation = self._cancel_generation
             self._current_text = text
             try:
                 output = _fetch_tts_wav(text, config.DEFAULT_TTS_WAV_PATH)
+                if self._is_generation_stale(generation):
+                    self._play_proc = None
+                    self._playback_start = 0.0
+                    self._playback_duration = 0.0
+                    continue
                 self._playback_start = time.monotonic()
                 self._playback_duration = _wav_duration_seconds(output)
                 _play_audio(output, owner=self)
@@ -147,6 +158,10 @@ class TTSPlayer:
                 if self._cancel.is_set():
                     self._cancel.clear()
                 self._current_text = ""
+
+    def _is_generation_stale(self, generation: int) -> bool:
+        with self._cancel_lock:
+            return generation != self._cancel_generation
 
 
 def _fetch_tts_wav(text: str, output_path: str | Path) -> Path:
