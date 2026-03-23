@@ -189,7 +189,7 @@ class Assistant:
             self.recorder.discard()
             return
 
-        route = route_user_request(transcript)
+        route = route_user_request(transcript, history=self._conversation_history)
         route_prompt = route.get("image_prompt")
         route_preview = None
         if isinstance(route_prompt, str):

@@ -4,6 +4,7 @@ import subprocess
 import threading
 import time
 import wave
+import logging
 from pathlib import Path
 
 import requests
@@ -12,6 +13,7 @@ import config
 
 
 _SENTINEL = object()
+log = logging.getLogger("athena.tts")
 
 
 class TTSPlayer:
@@ -102,13 +104,20 @@ class TTSPlayer:
             if not text:
                 continue
             self._current_text = text
-            output = _fetch_tts_wav(text, config.DEFAULT_TTS_WAV_PATH)
-            self._playback_start = time.monotonic()
-            self._playback_duration = _wav_duration_seconds(output)
-            _play_audio(output, owner=self)
-            if self._cancel.is_set():
-                self._cancel.clear()
-            self._current_text = ""
+            try:
+                output = _fetch_tts_wav(text, config.DEFAULT_TTS_WAV_PATH)
+                self._playback_start = time.monotonic()
+                self._playback_duration = _wav_duration_seconds(output)
+                _play_audio(output, owner=self)
+            except Exception as exc:
+                log.warning("TTS playback failed: %s", exc)
+                self._play_proc = None
+                self._playback_start = 0.0
+                self._playback_duration = 0.0
+            finally:
+                if self._cancel.is_set():
+                    self._cancel.clear()
+                self._current_text = ""
 
 
 def _fetch_tts_wav(text: str, output_path: str | Path) -> Path:
