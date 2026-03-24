@@ -19,5 +19,6 @@ fi
 echo "Bootstrap complete."
 echo "Next:"
 echo "  1. Edit .env and add your OPENAI_API_KEY"
-echo "  2. On a Pi, run: source .venv/bin/activate && python3 main.py"
-echo "  3. For laptop testing, run: source .venv/bin/activate && python3 demo_runner.py check"
+echo "  2. On a Pi, run: sudo python3 /home/athena_pi/athena/main.py"
+echo "  3. Optional helper check: source .venv/bin/activate && python3 demo_runner.py check"
+echo "  4. Optional prompt regression check: source .venv/bin/activate && python3 demo_runner.py prompt-check"
