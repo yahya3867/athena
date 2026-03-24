@@ -10,7 +10,7 @@ These are the Athena directions we currently feel best about, reordered around t
 
 ### Best Fit for the Current Push-to-Talk Model
 
-- low-battery and charging guidance spoken out loud
+- [x] low-battery and charging guidance spoken out loud
 - personalized profiles for language, font size, and speaking speed
 - scam and tech-confusion help for seniors
 - simple cognitive games or memory prompts
@@ -281,7 +281,7 @@ If we wanted a practical roadmap, I would prioritize:
 
 ### Phase 1: Push-to-Talk Wins
 
-- add low-battery spoken guidance
+- [x] low-battery and charging guidance
 - add personalized profiles
 - add scam and tech-help flows
 - add simple cognitive games and memory prompts
