@@ -370,14 +370,19 @@ class Assistant:
         if self._battery_alert_thread and self._battery_alert_thread.is_alive():
             return
 
-        now = time.monotonic()
-        if (now - self._last_battery_poll_at) < max(10, config.BATTERY_POLL_INTERVAL_SEC):
-            return
-        self._last_battery_poll_at = now
-
         pct, raw_status = read_battery_status()
         status = self._normalize_battery_status(raw_status)
-        alert = self._battery_alert_message(pct, status)
+        alert = None
+
+        if self._charging_started(status):
+            alert = self._charging_transition_message(pct)
+            self._last_battery_alert_level = None
+        else:
+            now = time.monotonic()
+            if (now - self._last_battery_poll_at) >= max(10, config.BATTERY_POLL_INTERVAL_SEC):
+                self._last_battery_poll_at = now
+                alert = self._battery_alert_message(pct, status)
+
         self._last_battery_pct = pct
         self._last_battery_status = status
         if not alert:
@@ -399,18 +404,22 @@ class Assistant:
             return "Full"
         return status.strip()
 
+    def _charging_started(self, status: str | None) -> bool:
+        return status == "Charging" and self._last_battery_status not in {None, "Charging"}
+
+    def _charging_transition_message(self, pct: int | None) -> str:
+        if pct is None:
+            return "I'm charging now."
+        if pct <= config.BATTERY_CRITICAL_THRESHOLD:
+            return f"Thank you. I'm charging now. My battery is {pct} percent."
+        return f"I'm charging now. My battery is {pct} percent."
+
     def _battery_alert_message(self, pct: int | None, status: str | None) -> str | None:
         if pct is None:
             return None
 
         if status == "Charging":
-            started_charging = self._last_battery_status not in {None, "Charging"}
-            alert_level = self._last_battery_alert_level
             self._last_battery_alert_level = None
-            if alert_level is not None or (started_charging and pct <= config.BATTERY_LOW_THRESHOLD):
-                if pct <= config.BATTERY_CRITICAL_THRESHOLD:
-                    return f"Thank you. I'm charging now. My battery is {pct} percent."
-                return f"I'm charging now. My battery is {pct} percent."
             return None
 
         if status == "Full":
