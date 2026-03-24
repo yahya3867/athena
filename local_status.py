@@ -101,6 +101,11 @@ def maybe_answer_local_status(user_text: str) -> str | None:
     return None
 
 
+def read_battery_status() -> tuple[int | None, str | None]:
+    """Public battery reader for status UI and background guidance."""
+    return _read_battery()
+
+
 def _is_time_question(lower: str) -> bool:
     asks_for_time = any(
         phrase in lower

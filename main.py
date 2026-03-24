@@ -23,7 +23,7 @@ from stt_client import transcribe
 from chat_client import stream_response
 from image_client import generate_image
 from intent_router import route_user_request
-from local_status import maybe_answer_local_status
+from local_status import maybe_answer_local_status, read_battery_status
 from button_ptt import ButtonPTT, State
 from tts_client import TTSPlayer
 
@@ -58,6 +58,11 @@ class Assistant:
         self._listen_started_at = 0.0
         self._tts = TTSPlayer() if config.ENABLE_TTS else None
         self._conversation_history: list[dict] = []
+        self._last_battery_poll_at = 0.0
+        self._last_battery_status: str | None = None
+        self._last_battery_pct: int | None = None
+        self._last_battery_alert_level: str | None = None
+        self._battery_alert_thread: threading.Thread | None = None
 
     def _is_stale(self, my_gen: int) -> bool:
         return self._worker_gen != my_gen
@@ -103,6 +108,8 @@ class Assistant:
         self._touch()
         self._dismiss.set()
         log.info("button pressed -- start recording")
+        if self._tts:
+            self._tts.cancel()
         self.display.reset_transient_state()
         self._listen_started_at = time.monotonic()
         if self._tts:
@@ -355,6 +362,97 @@ class Assistant:
         self.display.reset_transient_state()
         self.display.set_idle_screen()
 
+    def _poll_battery_guidance(self, *, worker_busy: bool) -> None:
+        if not self._tts or worker_busy or self.ptt.state != State.IDLE:
+            return
+        if self.display.has_active_transient_renderer() or self.display.is_showing_image():
+            return
+        if self._battery_alert_thread and self._battery_alert_thread.is_alive():
+            return
+
+        now = time.monotonic()
+        if (now - self._last_battery_poll_at) < max(10, config.BATTERY_POLL_INTERVAL_SEC):
+            return
+        self._last_battery_poll_at = now
+
+        pct, raw_status = read_battery_status()
+        status = self._normalize_battery_status(raw_status)
+        alert = self._battery_alert_message(pct, status)
+        self._last_battery_pct = pct
+        self._last_battery_status = status
+        if not alert:
+            return
+
+        t = threading.Thread(target=self._speak_battery_guidance, args=(alert,), daemon=True)
+        t.start()
+        self._battery_alert_thread = t
+
+    def _normalize_battery_status(self, status: str | None) -> str | None:
+        if not status:
+            return None
+        normalized = status.strip().lower()
+        if normalized == "charging":
+            return "Charging"
+        if normalized == "discharging":
+            return "Discharging"
+        if normalized == "full":
+            return "Full"
+        return status.strip()
+
+    def _battery_alert_message(self, pct: int | None, status: str | None) -> str | None:
+        if pct is None:
+            return None
+
+        if status == "Charging":
+            started_charging = self._last_battery_status not in {None, "Charging"}
+            alert_level = self._last_battery_alert_level
+            self._last_battery_alert_level = None
+            if alert_level is not None or (started_charging and pct <= config.BATTERY_LOW_THRESHOLD):
+                if pct <= config.BATTERY_CRITICAL_THRESHOLD:
+                    return f"Thank you. I'm charging now. My battery is {pct} percent."
+                return f"I'm charging now. My battery is {pct} percent."
+            return None
+
+        if status == "Full":
+            self._last_battery_alert_level = None
+            return None
+
+        if pct > config.BATTERY_LOW_THRESHOLD:
+            self._last_battery_alert_level = None
+            return None
+
+        if pct <= config.BATTERY_CRITICAL_THRESHOLD:
+            if self._last_battery_alert_level == "critical":
+                return None
+            self._last_battery_alert_level = "critical"
+            return f"My battery is {pct} percent. Please charge me now."
+
+        if self._last_battery_alert_level in {"low", "critical"}:
+            return None
+        self._last_battery_alert_level = "low"
+        return f"My battery is {pct} percent. Please plug me in soon."
+
+    def _speak_battery_guidance(self, text: str) -> None:
+        if not self._tts or self._shutdown.is_set() or self.ptt.state != State.IDLE:
+            return
+
+        show_visual = not self.display.is_sleeping
+        log.info("battery guidance => %r", text)
+        try:
+            if show_visual:
+                self.display.start_character("talking", self._tts)
+            self._tts.submit(text)
+            self._tts.flush()
+        finally:
+            if show_visual:
+                self.display.stop_character()
+            if (
+                not self._shutdown.is_set()
+                and self.ptt.state == State.IDLE
+                and not self.display.is_sleeping
+            ):
+                self._go_idle()
+
     def _show_error(self, msg: str):
         self.ptt.state = State.ERROR
         self.display.reset_transient_state()
@@ -397,6 +495,8 @@ class Assistant:
                 ):
                     log.info("idle timeout -- sleeping display")
                     self.display.sleep()
+
+                self._poll_battery_guidance(worker_busy=worker_busy)
         except KeyboardInterrupt:
             log.info("shutting down...")
         finally:

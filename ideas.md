@@ -10,7 +10,6 @@ These are the Athena directions we currently feel best about, reordered around t
 
 ### Best Fit for the Current Push-to-Talk Model
 
-- offline-aware responses like "I need Wi-Fi for that"
 - low-battery and charging guidance spoken out loud
 - personalized profiles for language, font size, and speaking speed
 - scam and tech-confusion help for seniors
@@ -207,8 +206,6 @@ This is one place Athena could feel more practical than many generic companions.
 
 ### Core UX
 
-- clearer offline messaging
-- explicit offline-aware responses like "I need Wi-Fi for that"
 - clearer "thinking" state
 - smoother interruptions
 - better very long-answer summarization
@@ -223,8 +220,6 @@ This is one place Athena could feel more practical than many generic companions.
 
 ### Trust and Transparency
 
-- "I am offline right now"
-- "I need Wi-Fi for that"
 - "I can show you a picture"
 - "I can remind you tomorrow at 9 AM"
 
@@ -286,8 +281,6 @@ If we wanted a practical roadmap, I would prioritize:
 
 ### Phase 1: Push-to-Talk Wins
 
-- improve offline/error handling
-- add explicit offline-aware responses
 - add low-battery spoken guidance
 - add personalized profiles
 - add scam and tech-help flows

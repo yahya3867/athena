@@ -64,6 +64,9 @@ ENABLE_TTS = os.environ.get("ENABLE_TTS", "true").lower() in ("1", "true", "yes"
 LCD_BACKLIGHT = int(os.environ.get("LCD_BACKLIGHT", "70"))
 UI_MAX_FPS = int(os.environ.get("UI_MAX_FPS", "4"))
 DISPLAY_SLEEP_TIMEOUT = int(os.environ.get("DISPLAY_SLEEP_TIMEOUT", "300"))
+BATTERY_POLL_INTERVAL_SEC = int(os.environ.get("BATTERY_POLL_INTERVAL_SEC", "60"))
+BATTERY_LOW_THRESHOLD = int(os.environ.get("BATTERY_LOW_THRESHOLD", "20"))
+BATTERY_CRITICAL_THRESHOLD = int(os.environ.get("BATTERY_CRITICAL_THRESHOLD", "10"))
 DRY_RUN = not OPENAI_API_KEY
 
 OUTPUT_DIR = BASE_DIR / "output"
@@ -102,4 +105,7 @@ def print_config() -> None:
     print(f"HISTORY_LENGTH         = {CONVERSATION_HISTORY_LENGTH}")
     print(f"SILENCE_RMS_THRESHOLD  = {SILENCE_RMS_THRESHOLD}")
     print(f"DISPLAY_SLEEP_TIMEOUT  = {DISPLAY_SLEEP_TIMEOUT}")
+    print(f"BATTERY_POLL_INTERVAL  = {BATTERY_POLL_INTERVAL_SEC}")
+    print(f"BATTERY_LOW_THRESHOLD  = {BATTERY_LOW_THRESHOLD}")
+    print(f"BATTERY_CRITICAL_THRES = {BATTERY_CRITICAL_THRESHOLD}")
     print(f"OPENAI_API_KEY set     = {bool(OPENAI_API_KEY)}")
